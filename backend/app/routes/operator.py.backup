@@ -1,0 +1,1229 @@
+
+
+from flask import Blueprint, request, jsonify
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from datetime import datetime, timedelta
+from bson import ObjectId
+from app import mongo
+import logging
+from typing import Dict, List, Optional, Union
+
+operator_bp = Blueprint('operator', __name__)
+logger = logging.getLogger(__name__)
+
+# ==================== UTILITY FUNCTIONS ====================
+
+class OperatorUtils:
+    """Utility class for operator operations"""
+    
+    @staticmethod
+    def get_current_user() -> Optional[Dict]:
+        """Get current user data with role validation"""
+        try:
+            current_user_id = get_jwt_identity()
+            user = mongo.db.users.find_one({'_id': ObjectId(current_user_id)})
+            if not user:
+                return None
+            return user
+        except Exception as e:
+            logger.error(f"Error getting current user: {e}")
+            return None
+    
+    @staticmethod
+    def has_operator_access() -> bool:
+        """Check if user has operator, driver or admin access"""
+        user = OperatorUtils.get_current_user()
+        return user and user.get('role') in ['operator', 'admin', 'driver']
+    
+    @staticmethod
+    def serialize_document(doc) -> Union[Dict, List]:
+        """Serialize MongoDB document for JSON response"""
+        if not doc:
+            return None
+        
+        if isinstance(doc, list):
+            return [OperatorUtils.serialize_document(item) for item in doc]
+        
+        serialized = {}
+        for key, value in doc.items():
+            if key == '_id':
+                serialized['id'] = str(value)
+            elif isinstance(value, ObjectId):
+                serialized[key] = str(value)
+            elif isinstance(value, datetime):
+                serialized[key] = value.isoformat()
+            elif isinstance(value, list):
+                serialized[key] = [OperatorUtils.serialize_document(item) if isinstance(item, dict) else item for item in value]
+            elif isinstance(value, dict):
+                serialized[key] = OperatorUtils.serialize_document(value)
+            else:
+                serialized[key] = value
+        return serialized
+    
+    @staticmethod
+    def validate_object_id(id_str: str) -> ObjectId:
+        """Validate and convert string to ObjectId"""
+        try:
+            return ObjectId(id_str)
+        except Exception:
+            raise ValueError(f"Invalid ID format: {id_str}")
+    
+    @staticmethod
+    def calculate_date_range(timeframe: str) -> tuple:
+        """Calculate date range based on timeframe"""
+        now = datetime.utcnow()
+        today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        if timeframe == 'week':
+            start_date = today - timedelta(days=today.weekday())
+            end_date = start_date + timedelta(days=7)
+        elif timeframe == 'month':
+            start_date = today.replace(day=1)
+            next_month = start_date.replace(day=28) + timedelta(days=4)
+            end_date = next_month.replace(day=1)
+        else:  # today
+            start_date = today
+            end_date = today + timedelta(days=1)
+        
+        return start_date, end_date
+    
+    @staticmethod
+    def validate_checkin_timing(travel_date: str, departure_time: str) -> Dict:
+        """
+        Validate check-in timing according to business rules
+        
+        Returns:
+            Dict with 'allowed', 'warning', 'hours_until_departure', 'error'
+        """
+        if not travel_date or not departure_time:
+            return {'allowed': True}  # Skip validation if data missing
+        
+        try:
+            # Combine travel date and departure time
+            departure_datetime_str = f"{travel_date} {departure_time}"
+            
+            # Try multiple datetime formats to handle both HH:MM and HH:MM:SS
+            for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M']:
+                try:
+                    departure_datetime = datetime.strptime(departure_datetime_str, fmt)
+                    break
+                except ValueError:
+                    continue
+            else:
+                # If no format matched, skip validation
+                logger.warning(f"Could not parse datetime: {departure_datetime_str}")
+                return {'allowed': True}
+            
+            current_datetime = datetime.now()
+            
+            # Calculate time difference
+            time_until_departure = departure_datetime - current_datetime
+            hours_until_departure = time_until_departure.total_seconds() / 3600
+            
+            result = {
+                'hours_until_departure': round(hours_until_departure, 2),
+                'departure_time': departure_time,
+                'travel_date': travel_date
+            }
+            
+            # BLOCK: If departure has already passed
+            if hours_until_departure <= 0:
+                result.update({
+                    'allowed': False,
+                    'error': 'Cannot check in - Bus has already departed',
+                    'message': 'This schedule has already departed',
+                    'blocked': True
+                })
+                return result
+            
+            # BLOCK: If departure is within 2 hours (too late to check in)
+            if hours_until_departure < 2:
+                result.update({
+                    'allowed': False,
+                    'error': 'Check-in closed - Departure within 2 hours',
+                    'message': 'Check-in closes 2 hours before departure time',
+                    'blocked': True
+                })
+                return result
+            
+            # ALLOW with WARNING: If departure is more than 24 hours away (early check-in)
+            if hours_until_departure > 24:
+                result.update({
+                    'allowed': True,
+                    'warning': f'⚠️ Early check-in: Departure is in {round(hours_until_departure, 1)} hours ({int(hours_until_departure / 24)} days). Check-in typically opens 24 hours before departure.',
+                    'check_in_status': 'early',
+                    'message': f'Early check-in allowed - {round(hours_until_departure, 1)} hours until departure'
+                })
+                return result
+            
+            # ALLOW: Check-in is within optimal window (6-24 hours)
+            if 6 < hours_until_departure <= 24:
+                result.update({
+                    'allowed': True,
+                    'check_in_status': 'optimal',
+                    'message': f'Check-in window optimal - {round(hours_until_departure, 1)} hours until departure'
+                })
+                return result
+            
+            # ALLOW with WARNING: If departure is soon (2-6 hours)
+            if 2 <= hours_until_departure <= 6:
+                result.update({
+                    'allowed': True,
+                    'warning': f'⚠️ Departure is in {round(hours_until_departure, 1)} hours - Passenger should arrive at the station soon!',
+                    'check_in_status': 'urgent',
+                    'message': f'Check-in allowed - Departure approaching in {round(hours_until_departure, 1)} hours'
+                })
+                return result
+            
+            # Default allow (should not reach here, but safety fallback)
+            result['allowed'] = True
+            return result
+            
+        except ValueError as ve:
+            logger.warning(f"Invalid date/time format: {ve}")
+            return {'allowed': True}  # Skip validation on format errors
+
+# ==================== CHECK-IN MANAGEMENT ====================
+
+@operator_bp.route('/checkin/quick', methods=['POST'])
+@jwt_required()
+def quick_checkin():
+    """
+    Quick check-in by PNR number with enhanced time validation
+    
+    Check-in Window:
+    - Early Check-in: More than 24 hours before departure (ALLOWED with warning)
+    - Optimal: 6-24 hours before departure (ALLOWED - best time)
+    - Urgent: 2-6 hours before departure (ALLOWED with warning - passenger should hurry)
+    - Too Late: Less than 2 hours before departure (BLOCKED - check-in closed)
+    - Departed: After departure time (BLOCKED - bus already left)
+    
+    New Policy: Check-in is now available at any time before 2 hours of departure,
+    with appropriate warnings for early or urgent check-ins.
+    """
+    try:
+        if not OperatorUtils.has_operator_access():
+            return jsonify({'error': 'Operator access required'}), 403
+        
+        data = request.get_json()
+        pnr_number = data.get('pnr_number')
+        
+        logger.info(f"Quick check-in attempt for PNR: {pnr_number}")
+        
+        if not pnr_number:
+            return jsonify({'error': 'PNR number is required'}), 400
+        
+        # Find the booking
+        booking = mongo.db.bookings.find_one({'pnr_number': pnr_number.upper()})
+        
+        if not booking:
+            return jsonify({'error': 'Booking not found. Please check PNR number.'}), 404
+        
+        logger.info(f"Booking found: {booking.get('_id')}, Status: {booking.get('status')}")
+        
+        # Check current status
+        current_status = booking.get('status')
+        
+        # Define valid status transitions
+        valid_transitions = {
+            'pending': 'checked_in',
+            'confirmed': 'checked_in', 
+            'checked_in': 'completed'
+        }
+        
+        if current_status not in valid_transitions:
+            return jsonify({
+                'success': False,
+                'error': f'Cannot check in booking with status: {current_status}',
+                'current_status': current_status
+            }), 400
+        
+        # Get next status
+        new_status = valid_transitions[current_status]
+        
+        # Enhanced check-in time validation - only check if moving to checked_in
+        timing_validation = {}
+        if new_status == 'checked_in':
+            timing_validation = OperatorUtils.validate_checkin_timing(
+                booking.get('travel_date'), 
+                booking.get('departure_time')
+            )
+            
+            if not timing_validation.get('allowed', True):
+                return jsonify({
+                    'success': False,
+                    **timing_validation
+                }), 400
+        
+        # Update booking status
+        current_time = datetime.now()
+        update_data = {
+            'status': new_status,
+            'updated_at': current_time
+        }
+        
+        if new_status == 'checked_in':
+            update_data.update({
+                'checked_in_at': current_time,
+                'checked_in_by': get_jwt_identity()
+            })
+            if timing_validation.get('warning'):
+                update_data['check_in_warning'] = timing_validation['warning']
+            if timing_validation.get('hours_until_departure'):
+                update_data['hours_until_departure'] = timing_validation['hours_until_departure']
+        elif new_status == 'completed':
+            update_data['completed_at'] = current_time
+        
+        update_result = mongo.db.bookings.update_one(
+            {'pnr_number': pnr_number.upper()},
+            {'$set': update_data}
+        )
+        
+        if update_result.modified_count == 0:
+            return jsonify({'error': 'Failed to update booking status'}), 500
+        
+        # Get updated booking
+        updated_booking = mongo.db.bookings.find_one({'pnr_number': pnr_number.upper()})
+        
+        logger.info(f"Status updated: {current_status} → {new_status}")
+        
+        # Prepare response
+        response_data = {
+            'success': True,
+            'message': f'Booking status updated to {new_status} successfully!',
+            'booking': OperatorUtils.serialize_document(updated_booking),
+            'previous_status': current_status,
+            'new_status': new_status
+        }
+        
+        # Add timing information if available
+        if timing_validation.get('warning'):
+            response_data['warning'] = timing_validation['warning']
+        if timing_validation.get('hours_until_departure'):
+            response_data['hours_until_departure'] = timing_validation['hours_until_departure']
+        
+        return jsonify(response_data), 200
+        
+    except Exception as e:
+        logger.error(f"Quick checkin error: {e}")
+        return jsonify({'error': f'Quick check-in failed: {str(e)}'}), 500
+
+@operator_bp.route('/checkin/pending', methods=['GET'])
+@jwt_required()
+def get_pending_checkins():
+    """Get pending check-ins for TODAY'S TRAVEL DATE"""
+    try:
+        if not OperatorUtils.has_operator_access():
+            return jsonify({'error': 'Operator access required'}), 403
+        
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        
+        logger.info(f"Looking for pending checkins for travel date: {today_str}")
+        
+        # Use travel_date instead of created_at
+        pending_checkins = list(mongo.db.bookings.find({
+            'travel_date': today_str,
+            'status': {'$in': ['confirmed', 'pending']}
+        }).sort('departure_time', 1))
+        
+        logger.info(f"Found {len(pending_checkins)} pending checkins for today")
+        
+        formatted_checkins = []
+        for checkin in pending_checkins:
+            # Add timing validation for each pending checkin
+            timing_info = OperatorUtils.validate_checkin_timing(
+                checkin.get('travel_date'),
+                checkin.get('departure_time')
+            )
+            
+            # Convert seat_numbers to strings before joining
+            seat_numbers = checkin.get('seat_numbers', [])
+            seat_number_str = ', '.join(str(s) for s in seat_numbers) if seat_numbers else ''
+            
+            formatted_checkins.append({
+                'booking_id': str(checkin['_id']),
+                'pnr_number': checkin.get('pnr_number', ''),
+                'passenger_name': checkin.get('passenger_name', ''),
+                'passenger_phone': checkin.get('passenger_phone', ''),
+                'seat_number': seat_number_str,
+                'route': f"{checkin.get('departure_city', 'Unknown')} to {checkin.get('arrival_city', 'Unknown')}",
+                'departure_time': checkin.get('departure_time', ''),
+                'travel_date': checkin.get('travel_date', ''),
+                'has_baggage': checkin.get('has_baggage', False),
+                'baggage_weight': checkin.get('baggage_weight', 0),
+                'status': checkin.get('status', 'confirmed'),
+                'created_at': checkin.get('created_at', '').isoformat() if isinstance(checkin.get('created_at'), datetime) else '',
+                'can_check_in': timing_info.get('allowed', True),
+                'check_in_warning': timing_info.get('warning'),
+                'hours_until_departure': timing_info.get('hours_until_departure')
+            })
+        
+        return jsonify({
+            'success': True,
+            'pending_checkins': formatted_checkins,
+            'travel_date': today_str
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Pending checkins error: {e}")
+        return jsonify({'error': f'Failed to fetch pending check-ins: {str(e)}'}), 500
+
+@operator_bp.route('/checkin/today', methods=['GET'])
+@jwt_required()
+def get_todays_checkins():
+    """Get today's checked-in passengers"""
+    try:
+        if not OperatorUtils.has_operator_access():
+            return jsonify({'error': 'Operator access required'}), 403
+        
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        
+        checkins = list(mongo.db.bookings.find({
+            'travel_date': today_str,
+            'status': {'$in': ['checked_in', 'completed']}
+        }).sort('checked_in_at', -1))
+        
+        formatted_checkins = []
+        for checkin in checkins:
+            checkin_time = checkin.get('checked_in_at')
+            if isinstance(checkin_time, datetime):
+                checkin_time = checkin_time.isoformat()
+            else:
+                checkin_time = ''
+            
+            # Get route information - try multiple field names
+            departure_city = (checkin.get('departure_city') or 
+                            checkin.get('origin_city') or 
+                            checkin.get('originCity') or 
+                            'Unknown')
+            arrival_city = (checkin.get('arrival_city') or 
+                          checkin.get('destination_city') or 
+                          checkin.get('destinationCity') or 
+                          'Unknown')
+            
+            # Get schedule info if available
+            schedule_id = checkin.get('schedule_id')
+            if schedule_id and (departure_city == 'Unknown' or arrival_city == 'Unknown'):
+                try:
+                    schedule = mongo.db.busschedules.find_one({'_id': ObjectId(schedule_id)})
+                    if schedule:
+                        departure_city = (schedule.get('originCity') or 
+                                        schedule.get('origin_city') or 
+                                        schedule.get('departure_city') or 
+                                        departure_city)
+                        arrival_city = (schedule.get('destinationCity') or 
+                                      schedule.get('destination_city') or 
+                                      schedule.get('arrival_city') or 
+                                      arrival_city)
+                except:
+                    pass
+                
+            # Convert seat_numbers to strings before joining
+            seat_numbers = checkin.get('seat_numbers', [])
+            seat_number_str = ', '.join(str(s) for s in seat_numbers) if seat_numbers else ''
+            
+            formatted_checkins.append({
+                'id': str(checkin['_id']),
+                'booking_id': str(checkin['_id']),
+                'pnr_number': checkin.get('pnr_number', ''),
+                'passenger_name': checkin.get('passenger_name', ''),
+                'passenger_phone': checkin.get('passenger_phone', ''),
+                'seat_number': seat_number_str,
+                'route': f"{departure_city} → {arrival_city}",
+                'departure_city': departure_city,
+                'arrival_city': arrival_city,
+                'departure_time': checkin.get('departure_time', ''),
+                'travel_date': checkin.get('travel_date', ''),
+                'checkin_time': checkin_time,
+                'has_baggage': checkin.get('has_baggage', False),
+                'baggage_weight': checkin.get('baggage_weight', 0),
+                'status': checkin.get('status', 'checked_in')
+            })
+        
+        return jsonify({
+            'success': True,
+            'checkins': formatted_checkins,
+            'total': len(formatted_checkins),
+            'travel_date': today_str
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Today's checkins error: {e}")
+        return jsonify({'error': f'Failed to fetch today\'s check-ins: {str(e)}'}), 500
+
+@operator_bp.route('/checkins/recent', methods=['GET'])
+@jwt_required()
+def get_recent_checkins():
+    """Get recent check-ins (alias for today's checkins)"""
+    return get_todays_checkins()
+
+@operator_bp.route('/checkins/pending', methods=['GET'])
+@jwt_required()
+def get_pending_checkins_alias():
+    """Get pending check-ins (alias with different path)"""
+    return get_pending_checkins()
+
+@operator_bp.route('/checkins/stats', methods=['GET'])
+@jwt_required()
+def get_checkin_stats():
+    """Get check-in statistics for today"""
+    try:
+        if not OperatorUtils.has_operator_access():
+            return jsonify({'error': 'Operator access required'}), 403
+        
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        
+        # Get all bookings for today
+        total = mongo.db.bookings.count_documents({'travel_date': today_str})
+        
+        # Get checked-in bookings
+        checked_in = mongo.db.bookings.count_documents({
+            'travel_date': today_str,
+            'status': 'checked_in'
+        })
+        
+        # Get completed bookings
+        completed = mongo.db.bookings.count_documents({
+            'travel_date': today_str,
+            'status': 'completed'
+        })
+        
+        # Get pending bookings
+        pending = mongo.db.bookings.count_documents({
+            'travel_date': today_str,
+            'status': {'$in': ['confirmed', 'pending']}
+        })
+        
+        # Get cancelled bookings
+        cancelled = mongo.db.bookings.count_documents({
+            'travel_date': today_str,
+            'status': 'cancelled'
+        })
+        
+        # Get unpaid bookings
+        unpaid = mongo.db.bookings.count_documents({
+            'travel_date': today_str,
+            'payment_status': {'$in': ['pending', 'failed']}
+        })
+        
+        stats = {
+            'total': total,
+            'checkedIn': checked_in,
+            'completed': completed,
+            'pending': pending,
+            'cancelled': cancelled,
+            'unpaid': unpaid
+        }
+        
+        return jsonify({
+            'success': True,
+            'stats': stats,
+            'travel_date': today_str
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Checkin stats error: {e}")
+        return jsonify({'error': f'Failed to fetch check-in stats: {str(e)}'}), 500
+
+# ==================== BOOKING MANAGEMENT ====================
+
+@operator_bp.route('/bookings', methods=['GET'])
+@jwt_required()
+def get_bookings():
+    """Get all bookings for operator with timeframe filtering based on created_at"""
+    try:
+        if not OperatorUtils.has_operator_access():
+            return jsonify({'error': 'Operator access required'}), 403
+        
+        # Get query parameters
+        status = request.args.get('status', 'all')
+        timeframe = request.args.get('timeframe')  # today, week, month
+        schedule_id = request.args.get('schedule_id')
+        
+        # Build query
+        query = {}
+        if status != 'all':
+            query['status'] = status
+        
+        # Handle timeframe filtering based on CREATED DATE
+        if timeframe:
+            start_date, end_date = OperatorUtils.calculate_date_range(timeframe)
+            
+            logger.info(f"Filtering bookings by CREATED timeframe: {timeframe} ({start_date.date()} to {end_date.date()})")
+            
+            query['created_at'] = {
+                '$gte': start_date,
+                '$lt': end_date
+            }
+        
+        if schedule_id:
+            query['schedule_id'] = schedule_id
+        
+        logger.info(f"Bookings query: {query}")
+        bookings = list(mongo.db.bookings.find(query).sort('created_at', -1))
+        logger.info(f"Found {len(bookings)} bookings")
+        
+        # Enhanced serialization with status information
+        enhanced_bookings = []
+        for booking in bookings:
+            enhanced_booking = OperatorUtils.serialize_document(booking)
+            enhanced_booking['can_check_in'] = booking.get('status') in ['pending', 'confirmed']
+            enhanced_booking['can_cancel'] = booking.get('status') in ['pending', 'confirmed']
+            enhanced_bookings.append(enhanced_booking)
+        
+        return jsonify({
+            'success': True,
+            'bookings': enhanced_bookings,
+            'total': len(enhanced_bookings),
+            'timeframe': timeframe,
+            'query': query
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Get bookings error: {e}")
+        return jsonify({'error': f'Failed to fetch bookings: {str(e)}'}), 500
+
+@operator_bp.route('/bookings/<booking_id>/cancel', methods=['POST'])
+@jwt_required()
+def cancel_booking(booking_id):
+    """Cancel a booking - OPERATOR VERSION"""
+    try:
+        if not OperatorUtils.has_operator_access():
+            return jsonify({'error': 'Operator access required'}), 403
+        
+        data = request.get_json() or {}
+        reason = data.get('reason', 'Cancelled by operator')
+        
+        logger.info(f"Cancelling booking: {booking_id}")
+        
+        booking_oid = OperatorUtils.validate_object_id(booking_id)
+        booking = mongo.db.bookings.find_one({'_id': booking_oid})
+        
+        if not booking:
+            return jsonify({'error': 'Booking not found'}), 404
+        
+        current_status = booking.get('status')
+        logger.info(f"Current booking status: {current_status}")
+        
+        # Check if booking can be cancelled
+        cancellable_statuses = ['pending', 'confirmed']
+        if current_status not in cancellable_statuses:
+            return jsonify({
+                'success': False,
+                'error': f'Cannot cancel booking with status: {current_status}',
+                'current_status': current_status
+            }), 400
+        
+        # Calculate refund - 60% refund policy
+        total_amount = booking.get('total_amount', 0)
+        refund_percentage = 0.60  # 60% refund
+        refund_amount = round(total_amount * refund_percentage, 2)
+        cancellation_fee = round(total_amount - refund_amount, 2)
+        
+        logger.info(f"Refund calculation - Total: ETB {total_amount}, Refund (60%): ETB {refund_amount}, Fee: ETB {cancellation_fee}")
+        
+        # Update booking status to cancelled
+        current_time = datetime.now()
+        update_result = mongo.db.bookings.update_one(
+            {'_id': booking_oid},
+            {
+                '$set': {
+                    'status': 'cancelled',
+                    'cancellation_reason': reason,
+                    'cancelled_at': current_time,
+                    'cancelled_by': get_jwt_identity(),
+                    'refund_amount': refund_amount,
+                    'refund_percentage': refund_percentage * 100,
+                    'cancellation_fee': cancellation_fee,
+                    'refund_status': 'processed',
+                    'refund_processed_at': current_time,
+                    'refund_method': 'original_payment_method',
+                    'updated_at': current_time
+                }
+            }
+        )
+        
+        if update_result.modified_count == 0:
+            return jsonify({'error': 'Failed to cancel booking'}), 500
+        
+        # Get updated booking
+        updated_booking = mongo.db.bookings.find_one({'_id': booking_oid})
+        
+        logger.info(f"Booking cancelled successfully: {booking_id}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Booking cancelled successfully with 60% refund',
+            'booking': OperatorUtils.serialize_document(updated_booking),
+            'previous_status': current_status,
+            'new_status': 'cancelled',
+            'total_amount': total_amount,
+            'refund_amount': refund_amount,
+            'refund_percentage': 60,
+            'cancellation_fee': cancellation_fee
+        }), 200
+        
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logger.error(f"Cancel booking error: {e}")
+        return jsonify({'error': f'Failed to cancel booking: {str(e)}'}), 500
+
+@operator_bp.route('/bookings/lookup', methods=['GET'])
+@jwt_required()
+def lookup_booking():
+    """Lookup booking by PNR or phone with enhanced info"""
+    try:
+        if not OperatorUtils.has_operator_access():
+            return jsonify({'error': 'Operator access required'}), 403
+        
+        search = request.args.get('search', '')
+        search_type = request.args.get('type', 'pnr')
+        
+        if not search:
+            return jsonify({'error': 'Search term is required'}), 400
+        
+        query = {}
+        if search_type == 'pnr':
+            query['pnr_number'] = search.upper()
+        else:  # phone
+            query['passenger_phone'] = search
+        
+        booking = mongo.db.bookings.find_one(query)
+        
+        if not booking:
+            return jsonify({'error': 'Booking not found'}), 404
+        
+        # Enhanced booking info with action permissions
+        current_status = booking.get('status')
+        
+        # Check timing validation for check-in
+        timing_info = OperatorUtils.validate_checkin_timing(
+            booking.get('travel_date'),
+            booking.get('departure_time')
+        )
+        
+        formatted_booking = {
+            'id': str(booking['_id']),
+            'pnr_number': booking.get('pnr_number', ''),
+            'passenger_name': booking.get('passenger_name', ''),
+            'passenger_phone': booking.get('passenger_phone', ''),
+            'passenger_email': booking.get('passenger_email', ''),
+            'seat_numbers': booking.get('seat_numbers', []),
+            'status': current_status,
+            'route': f"{booking.get('departure_city', 'Unknown')} to {booking.get('arrival_city', 'Unknown')}",
+            'departure_time': booking.get('departure_time', ''),
+            'travel_date': booking.get('travel_date', ''),
+            'has_baggage': booking.get('has_baggage', False),
+            'baggage_weight': booking.get('baggage_weight', 0),
+            'total_amount': booking.get('total_amount', 0),
+            'payment_status': booking.get('payment_status', ''),
+            'payment_method': booking.get('payment_method', ''),
+            'created_at': booking.get('created_at', '').isoformat() if isinstance(booking.get('created_at'), datetime) else '',
+            # Action permissions with timing validation
+            'can_check_in': current_status in ['pending', 'confirmed'] and timing_info.get('allowed', True),
+            'can_cancel': current_status in ['pending', 'confirmed'],
+            'next_checkin_status': 'checked_in' if current_status in ['pending', 'confirmed'] else 'completed' if current_status == 'checked_in' else None,
+            'check_in_warning': timing_info.get('warning'),
+            'hours_until_departure': timing_info.get('hours_until_departure')
+        }
+        
+        return jsonify({
+            'success': True,
+            'booking': formatted_booking
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Booking lookup error: {e}")
+        return jsonify({'error': f'Booking lookup failed: {str(e)}'}), 500
+
+# ==================== REVENUE ANALYSIS ====================
+
+@operator_bp.route('/revenue/analysis', methods=['GET'])
+@jwt_required()
+def get_revenue_analysis():
+    """Get detailed revenue analysis for different time periods based on booking creation date"""
+    try:
+        if not OperatorUtils.has_operator_access():
+            return jsonify({'error': 'Operator access required'}), 403
+        
+        timeframes = ['today', 'week', 'month']
+        analysis = {}
+        
+        for timeframe in timeframes:
+            start_date, end_date = OperatorUtils.calculate_date_range(timeframe)
+            
+            # Get bookings CREATED in this timeframe
+            bookings = list(mongo.db.bookings.find({
+                'created_at': {
+                    '$gte': start_date,
+                    '$lt': end_date
+                }
+            }))
+            
+            # Calculate metrics
+            total_bookings_count = len(bookings)
+            total_revenue = sum(b.get('total_amount', 0) for b in bookings)
+            confirmed_revenue = sum(b.get('total_amount', 0) for b in bookings if b.get('status') != 'cancelled')
+            cancelled_revenue = sum(b.get('total_amount', 0) for b in bookings if b.get('status') == 'cancelled')
+            
+            # Count bookings by status
+            confirmed_bookings = len([b for b in bookings if b.get('status') in ['confirmed', 'pending']])
+            checked_in_bookings = len([b for b in bookings if b.get('status') in ['checked_in', 'completed']])
+            cancelled_bookings = len([b for b in bookings if b.get('status') == 'cancelled'])
+            
+            analysis[timeframe] = {
+                'date_range': f"{start_date.strftime('%Y-%m-%d')} to {(end_date - timedelta(days=1)).strftime('%Y-%m-%d')}",
+                'total_bookings': total_bookings_count,
+                'total_revenue': total_revenue,
+                'confirmed_revenue': confirmed_revenue,
+                'cancelled_revenue': cancelled_revenue,
+                'net_revenue': confirmed_revenue,
+                'bookings_by_status': {
+                    'confirmed': confirmed_bookings,
+                    'checked_in': checked_in_bookings,
+                    'cancelled': cancelled_bookings
+                },
+                'period_type': 'current'  # current week/month
+            }
+        
+        return jsonify({
+            'success': True,
+            'revenue_analysis': analysis,
+            'currency': 'ETB',
+            'current_date': datetime.utcnow().strftime('%Y-%m-%d'),
+            'calculation_basis': 'booking_creation_date'
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Revenue analysis error: {e}")
+        return jsonify({'error': f'Failed to fetch revenue analysis: {str(e)}'}), 500
+
+# ==================== DASHBOARD ENDPOINTS ====================
+
+@operator_bp.route('/dashboard/stats', methods=['GET'])
+@jwt_required()
+def get_operator_dashboard_stats():
+    """Get operator dashboard statistics - BASED ON CREATED DATE"""
+    try:
+        if not OperatorUtils.has_operator_access():
+            return jsonify({'error': 'Operator access required'}), 403
+        
+        timeframe = request.args.get('timeframe', 'today')
+        
+        logger.info(f"Dashboard stats for timeframe: {timeframe} - BASED ON CREATED DATE")
+        
+        # Calculate date range for CREATED DATE
+        start_date, end_date = OperatorUtils.calculate_date_range(timeframe)
+        
+        logger.info(f"Date range for created_at: {start_date.date()} to {end_date.date()}")
+        
+        # Get bookings based on CREATED DATE (when they were booked)
+        timeframe_bookings = list(mongo.db.bookings.find({
+            'created_at': {
+                '$gte': start_date,
+                '$lt': end_date
+            }
+        }))
+        
+        logger.info(f"Found {len(timeframe_bookings)} bookings CREATED in timeframe {timeframe}")
+        
+        # Calculate stats - ALL bookings created in the timeframe
+        period_checkins = len([b for b in timeframe_bookings if b.get('status') in ['checked_in', 'completed']])
+        pending_checkins = len([b for b in timeframe_bookings if b.get('status') in ['confirmed', 'pending']])
+        period_bookings_count = len(timeframe_bookings)
+        
+        # Calculate revenue - include ALL bookings created in the period
+        period_revenue = sum(
+            booking.get('total_amount', 0) 
+            for booking in timeframe_bookings
+            if booking.get('status') != 'cancelled'  # Only count non-cancelled bookings for revenue
+        )
+        
+        # Count completed and cancelled trips created in the period
+        completed_trips = len([b for b in timeframe_bookings if b.get('status') == 'completed'])
+        cancelled_trips = len([b for b in timeframe_bookings if b.get('status') == 'cancelled'])
+        
+        logger.info(f"Detailed counts for {timeframe} (CREATED DATE): Total: {period_bookings_count}, Checked in: {period_checkins}, Pending: {pending_checkins}, Revenue: {period_revenue}")
+        
+        # Get ALL schedules for occupancy calculation
+        all_schedules = list(mongo.db.busschedules.find({}))
+        
+        logger.info(f"Found {len(all_schedules)} total schedules")
+        
+        # Calculate overall occupancy rate (all time)
+        total_seats = 0
+        booked_seats = 0
+        
+        for schedule in all_schedules:
+            schedule_id = str(schedule['_id'])
+            schedule_seats = schedule.get('total_seats', 45)
+            total_seats += schedule_seats
+            
+            # Count bookings for this schedule
+            schedule_bookings = mongo.db.bookings.count_documents({
+                'schedule_id': schedule_id,
+                'status': {'$ne': 'cancelled'}
+            })
+            booked_seats += min(schedule_bookings, schedule_seats)
+        
+        occupancy_rate = round((booked_seats / total_seats * 100)) if total_seats > 0 else 0
+        
+        # Other stats - filtered by timeframe
+        active_trips = mongo.db.busschedules.count_documents({
+            'departureDate': {
+                '$gte': start_date,
+                '$lt': end_date
+            },
+            'status': {'$in': ['scheduled', 'boarding', 'active', 'departed']}
+        })
+        
+        on_route_trips = mongo.db.busschedules.count_documents({
+            'departureDate': {
+                '$gte': start_date,
+                '$lt': end_date
+            },
+            'status': {'$in': ['active', 'departed']}
+        })
+        
+        total_drivers = mongo.db.users.count_documents({'role': 'driver', 'is_active': True})
+        
+        # Check-in rate for the period
+        total_period_bookings = period_checkins + pending_checkins
+        checkin_rate = round((period_checkins / total_period_bookings * 100)) if total_period_bookings > 0 else 0
+        
+        logger.info(f"Final {timeframe.capitalize()} stats (CREATED DATE): Bookings: {period_bookings_count}, Revenue: {period_revenue}, Occupancy: {occupancy_rate}%")
+        
+        return jsonify({
+            'success': True,
+            'activeTrips': active_trips,
+            'onRouteTrips': on_route_trips,
+            'totalDrivers': total_drivers,
+            'periodBookings': period_bookings_count,
+            'pendingCheckins': pending_checkins,
+            'periodCheckins': period_checkins,
+            'periodRevenue': period_revenue,
+            'checkinRate': checkin_rate,
+            'occupancyRate': occupancy_rate,
+            'completedTrips': completed_trips,
+            'cancelledTrips': cancelled_trips,
+            'currency': 'ETB',
+            'timeframe': timeframe,
+            'startDate': start_date.strftime('%Y-%m-%d'),
+            'endDate': (end_date - timedelta(days=1)).strftime('%Y-%m-%d'),
+            'period_type': 'current',
+            'debug': {
+                'total_bookings_in_db': mongo.db.bookings.count_documents({}),
+                'timeframe_bookings_count': len(timeframe_bookings),
+                'calculation_based_on': 'created_date'
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Dashboard stats error: {e}")
+        return jsonify({'error': f'Failed to fetch dashboard stats: {str(e)}'}), 500
+
+# ==================== SCHEDULE MANAGEMENT ====================
+
+@operator_bp.route('/schedules', methods=['GET'])
+@jwt_required()
+def get_schedules():
+    """Get all schedules with filtering and timeframe support"""
+    try:
+        if not OperatorUtils.has_operator_access():
+            return jsonify({'error': 'Operator access required'}), 403
+        
+        status = request.args.get('status', 'all')
+        date = request.args.get('date')
+        timeframe = request.args.get('timeframe')  # today, week, month
+        
+        query = {}
+        
+        if status != 'all':
+            query['status'] = status
+        
+        # Handle timeframe filtering
+        if timeframe:
+            start_date, end_date = OperatorUtils.calculate_date_range(timeframe)
+            
+            logger.info(f"Filtering schedules by timeframe: {timeframe} ({start_date} to {end_date})")
+            
+            query['departureDate'] = {
+                '$gte': start_date,
+                '$lt': end_date
+            }
+        elif date:
+            # Specific date filter (legacy support)
+            try:
+                search_date = datetime.strptime(date, '%Y-%m-%d')
+                start_date = search_date.replace(hour=0, minute=0, second=0, microsecond=0)
+                end_date = start_date + timedelta(days=1)
+                query['departureDate'] = {'$gte': start_date, '$lt': end_date}
+            except ValueError:
+                return jsonify({'error': 'Invalid date format'}), 400
+        
+        logger.info(f"Schedules query: {query}")
+        schedules = list(mongo.db.busschedules.find(query).sort('departureDate', 1))
+        logger.info(f"Found {len(schedules)} schedules")
+        
+        enriched_schedules = []
+        for schedule in schedules:
+            # Get route information
+            route_name = schedule.get('route_name', '')
+            if not route_name:
+                # Fallback to route construction
+                origin = schedule.get('origin_city', schedule.get('originCity', 'Unknown'))
+                destination = schedule.get('destination_city', schedule.get('destinationCity', 'Unknown'))
+                route_name = f"{origin} - {destination}"
+            
+            # Get bus capacity
+            bus_capacity = schedule.get('total_seats', 45)
+            bus_number = schedule.get('bus_number', schedule.get('busNumber', 'Unknown'))
+            
+            # Calculate booked seats
+            schedule_id_str = str(schedule['_id'])
+            bookings_count = mongo.db.bookings.count_documents({
+                'schedule_id': schedule_id_str,
+                'status': {'$ne': 'cancelled'}
+            })
+            
+            available_seats = max(0, bus_capacity - bookings_count)
+            
+            # Use correct field names with fallbacks
+            enriched_schedule = {
+                '_id': str(schedule['_id']),
+                'route_name': route_name,
+                'bus_number': bus_number,
+                'driver_name': schedule.get('driver_name', 'Not assigned'),
+                'departure_date': schedule.get('departure_date', schedule.get('departureDate', '').strftime('%Y-%m-%d') if isinstance(schedule.get('departureDate'), datetime) else ''),
+                'departure_time': schedule.get('departure_time', schedule.get('departureTime', '')),
+                'arrival_time': schedule.get('arrivalTime', ''),
+                'status': schedule.get('status', 'scheduled'),
+                'available_seats': available_seats,
+                'booked_seats': bookings_count,
+                'total_seats': bus_capacity,
+                'fare_birr': schedule.get('fare_birr', schedule.get('fareBirr', 0)),
+                'origin_city': schedule.get('origin_city', schedule.get('originCity', '')),
+                'destination_city': schedule.get('destination_city', schedule.get('destinationCity', ''))
+            }
+            
+            # Ensure we have a proper route name
+            if not enriched_schedule['route_name']:
+                enriched_schedule['route_name'] = f"{enriched_schedule['origin_city']} → {enriched_schedule['destination_city']}"
+            
+            enriched_schedules.append(enriched_schedule)
+        
+        return jsonify({
+            'success': True,
+            'schedules': enriched_schedules,
+            'total': len(enriched_schedules)
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Get schedules error: {e}")
+        return jsonify({'error': f'Failed to fetch schedules: {str(e)}'}), 500
+
+# ==================== REPORTS ====================
+
+@operator_bp.route('/reports', methods=['GET'])
+@jwt_required()
+def get_reports():
+    """Get comprehensive reports and analytics"""
+    try:
+        if not OperatorUtils.has_operator_access():
+            return jsonify({'error': 'Operator access required'}), 403
+        
+        period = request.args.get('period', 'today')
+        
+        # Calculate date ranges
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        tomorrow = today + timedelta(days=1)
+        week_start = today - timedelta(days=today.weekday())
+        week_end = week_start + timedelta(days=7)
+        
+        # Get today's bookings
+        today_str = today.strftime('%Y-%m-%d')
+        tomorrow_str = tomorrow.strftime('%Y-%m-%d')
+        
+        today_bookings = list(mongo.db.bookings.find({
+            'travel_date': today_str,
+            'status': {'$ne': 'cancelled'}
+        }))
+        
+        tomorrow_bookings = list(mongo.db.bookings.find({
+            'travel_date': tomorrow_str,
+            'status': {'$ne': 'cancelled'}
+        }))
+        
+        # Format bookings
+        def format_booking(booking):
+            return {
+                'id': str(booking['_id']),
+                'pnr_number': booking.get('pnr_number', ''),
+                'passengerName': booking.get('passenger_name', ''),
+                'phoneNumber': booking.get('passenger_phone', ''),
+                'busNumber': booking.get('bus_number', 'N/A'),
+                'routeName': f"{booking.get('departure_city', 'Unknown')} → {booking.get('arrival_city', 'Unknown')}",
+                'departureTime': booking.get('departure_time', ''),
+                'seatNumbers': booking.get('seat_numbers', []),
+                'totalAmount': booking.get('total_amount', 0),
+                'status': booking.get('status', 'confirmed')
+            }
+        
+        # Calculate today's revenue
+        today_revenue = sum(b.get('total_amount', 0) for b in today_bookings)
+        today_passenger_count = len(today_bookings)
+        
+        # Get weekly stats
+        weekly_bookings = list(mongo.db.bookings.find({
+            'created_at': {'$gte': week_start, '$lt': week_end},
+            'status': {'$ne': 'cancelled'}
+        }))
+        
+        weekly_revenue = sum(b.get('total_amount', 0) for b in weekly_bookings)
+        
+        # Calculate occupancy
+        weekly_schedules = list(mongo.db.busschedules.find({
+            'departureDate': {'$gte': week_start, '$lt': week_end}
+        }))
+        
+        total_seats = sum(s.get('total_seats', 45) for s in weekly_schedules)
+        booked_seats = len(weekly_bookings)
+        average_occupancy = round((booked_seats / total_seats * 100)) if total_seats > 0 else 0
+        
+        # Route performance
+        route_stats = {}
+        for booking in weekly_bookings:
+            route = f"{booking.get('departure_city', 'Unknown')} → {booking.get('arrival_city', 'Unknown')}"
+            if route not in route_stats:
+                route_stats[route] = {'bookings': 0, 'revenue': 0}
+            route_stats[route]['bookings'] += 1
+            route_stats[route]['revenue'] += booking.get('total_amount', 0)
+        
+        route_performance = [
+            {'route': route, 'bookings': stats['bookings'], 'revenue': stats['revenue']}
+            for route, stats in route_stats.items()
+        ]
+        route_performance.sort(key=lambda x: x['revenue'], reverse=True)
+        
+        # Bus performance
+        bus_stats = {}
+        for booking in weekly_bookings:
+            bus = booking.get('bus_number', 'Unknown')
+            if bus not in bus_stats:
+                bus_stats[bus] = {'bookings': 0, 'revenue': 0}
+            bus_stats[bus]['bookings'] += 1
+            bus_stats[bus]['revenue'] += booking.get('total_amount', 0)
+        
+        bus_performance = [
+            {'busNumber': bus, 'bookings': stats['bookings'], 'revenue': stats['revenue']}
+            for bus, stats in bus_stats.items()
+        ]
+        bus_performance.sort(key=lambda x: x['revenue'], reverse=True)
+        
+        # Cancellation rate
+        total_bookings_week = mongo.db.bookings.count_documents({
+            'created_at': {'$gte': week_start, '$lt': week_end}
+        })
+        cancelled_bookings = mongo.db.bookings.count_documents({
+            'created_at': {'$gte': week_start, '$lt': week_end},
+            'status': 'cancelled'
+        })
+        cancellation_rate = round((cancelled_bookings / total_bookings_week * 100)) if total_bookings_week > 0 else 0
+        
+        # Most popular route
+        most_popular_route = route_performance[0] if route_performance else None
+        
+        # Booking trends (last 7 days)
+        booking_trends = []
+        for i in range(7):
+            date = today - timedelta(days=6-i)
+            date_str = date.strftime('%Y-%m-%d')
+            count = mongo.db.bookings.count_documents({
+                'travel_date': date_str,
+                'status': {'$ne': 'cancelled'}
+            })
+            booking_trends.append({
+                'date': date_str,
+                'bookings': count
+            })
+        
+        return jsonify({
+            'success': True,
+            'todayBookings': [format_booking(b) for b in today_bookings],
+            'todayRevenue': today_revenue,
+            'todayPassengerCount': today_passenger_count,
+            'tomorrowBookings': [format_booking(b) for b in tomorrow_bookings],
+            'weeklyStats': {
+                'totalBookings': len(weekly_bookings),
+                'totalRevenue': weekly_revenue,
+                'totalPassengers': len(weekly_bookings),
+                'averageOccupancy': average_occupancy
+            },
+            'bookingTrends': booking_trends,
+            'routePerformance': route_performance[:10],
+            'busPerformance': bus_performance[:10],
+            'cancellationRate': cancellation_rate,
+            'mostPopularRoute': most_popular_route
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Reports error: {e}")
+        return jsonify({'error': f'Failed to fetch reports: {str(e)}'}), 500
+
+# ==================== SYSTEM STATUS ====================
+
+@operator_bp.route('/system/status', methods=['GET'])
+@jwt_required()
+def get_system_status():
+    """Get system status"""
+    try:
+        if not OperatorUtils.has_operator_access():
+            return jsonify({'error': 'Operator access required'}), 403
+        
+        # Test database connection
+        mongo.db.command('ping')
+        
+        # Get system metrics
+        total_schedules = mongo.db.busschedules.count_documents({})
+        active_schedules = mongo.db.busschedules.count_documents({'status': 'scheduled'})
+        total_bookings = mongo.db.bookings.count_documents({})
+        active_drivers = mongo.db.users.count_documents({'role': 'driver', 'is_active': True})
+        active_buses = mongo.db.buses.count_documents({'status': 'active'})
+        
+        return jsonify({
+            'status': 'healthy',
+            'service': 'Operator API',
+            'database': 'connected',
+            'metrics': {
+                'total_schedules': total_schedules,
+                'active_schedules': active_schedules,
+                'total_bookings': total_bookings,
+                'active_drivers': active_drivers,
+                'active_buses': active_buses
+            },
+            'timestamp': datetime.now().isoformat()
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"System status error: {e}")
+        return jsonify({
+            'status': 'unhealthy',
+            'service': 'Operator API',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
+
+# ==================== ERROR HANDLING ====================
+
+@operator_bp.errorhandler(404)
+def not_found(error):
+    return jsonify({'error': 'Resource not found'}), 404
+
+@operator_bp.errorhandler(500)
+def internal_error(error):
+    return jsonify({'error': 'Internal server error'}), 500
+
+@operator_bp.errorhandler(400)
+def bad_request(error):
+    return jsonify({'error': 'Bad request'}), 400
