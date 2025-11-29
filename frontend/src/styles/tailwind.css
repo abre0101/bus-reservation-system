@@ -1,0 +1,6 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* load the ui mapping after Tailwind base so custom @apply works */
+@import "./ui.css";

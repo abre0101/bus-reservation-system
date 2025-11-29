@@ -1,0 +1,927 @@
+/* OperatorPanel.css - Full Screen Enhanced */
+.operator-panel-container {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  background: #f8fafc;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+/* Sidebar */
+.operator-sidebar {
+  width: 280px;
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  color: white;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  height: 100vh;
+  overflow-y: auto;
+  position: relative;
+  z-index: 100;
+}
+
+.sidebar-header {
+  padding: 30px 25px;
+  border-bottom: 1px solid #475569;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.sidebar-header h2 {
+  margin: 0 0 5px 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #60a5fa, #3b82f6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.sidebar-header p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+.sidebar-nav {
+  flex: 1;
+  padding: 20px 0;
+  overflow-y: auto;
+}
+
+.nav-section {
+  padding: 15px 25px 10px 25px;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  border-bottom: 1px solid #475569;
+  margin-bottom: 10px;
+}
+
+.nav-item {
+  width: 100%;
+  padding: 15px 25px;
+  background: none;
+  border: none;
+  color: #cbd5e1;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 1rem;
+  border-left: 4px solid transparent;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 500;
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+  transform: translateX(5px);
+}
+
+.nav-item.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
+  border-left-color: #3b82f6;
+  font-weight: 600;
+}
+
+.sidebar-footer {
+  padding: 20px 25px;
+  border-top: 1px solid #475569;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.operator-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.operator-avatar {
+  width: 42px;
+  height: 42px;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.1rem;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.operator-info {
+  flex: 1;
+}
+
+.operator-info strong {
+  display: block;
+  font-size: 0.9rem;
+  color: white;
+}
+
+.operator-info span {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  text-transform: capitalize;
+}
+
+/* Main Content */
+.operator-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100vh;
+  overflow: hidden;
+  width: calc(100vw - 280px);
+  background: #f8fafc;
+}
+
+.operator-header {
+  background: white;
+  padding: 20px 30px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+  flex-shrink: 0;
+  width: 100%;
+}
+
+.header-left h1 {
+  margin: 0 0 5px 0;
+  font-size: 1.8rem;
+  color: #1e293b;
+  font-weight: 700;
+}
+
+.header-left p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.quick-stats {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+}
+
+.stat-item {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: white;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
+}
+
+.search-box {
+  position: relative;
+}
+
+.search-box input {
+  padding: 12px 15px 12px 42px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  width: 320px;
+  font-size: 0.9rem;
+  background: #f8fafc;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.search-box input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 2px 12px rgba(59, 130, 246, 0.15);
+  background: white;
+}
+
+.search-icon {
+  position: absolute;
+  left: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #64748b;
+  font-size: 1.1rem;
+}
+
+.refresh-btn {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.refresh-btn:hover {
+  background: linear-gradient(135deg, #2563eb, #1e40af);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+/* Dashboard Section */
+.dashboard-section {
+  padding: 30px;
+  flex: 1;
+  overflow-y: auto;
+  width: 100%;
+  background: #f8fafc;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 25px;
+  margin-bottom: 30px;
+  width: 100%;
+}
+
+.metric-card {
+  background: white;
+  border-radius: 16px;
+  padding: 25px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  border: 1px solid #f1f5f9;
+  transition: all 0.3s ease;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.metric-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(135deg, currentColor, transparent);
+  opacity: 0.7;
+}
+
+.metric-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+.metric-icon {
+  font-size: 2.5rem;
+  width: 70px;
+  height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.today-checkins .metric-icon { background: rgba(168, 85, 247, 0.15); color: #9333ea; }
+.pending-checkins .metric-icon { background: rgba(59, 130, 246, 0.15); color: #2563eb; }
+.total-bookings .metric-icon { background: rgba(34, 197, 94, 0.15); color: #16a34a; }
+.checkin-rate .metric-icon { background: rgba(245, 158, 11, 0.15); color: #d97706; }
+
+.metric-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.metric-info h3 {
+  margin: 0 0 8px 0;
+  font-size: 0.85rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.metric-value {
+  margin: 0 0 8px 0;
+  font-size: 2.2rem;
+  font-weight: 800;
+  color: #1e293b;
+  line-height: 1;
+}
+
+.metric-trend {
+  font-size: 0.8rem;
+  color: #16a34a;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Check-in Section */
+.checkin-section {
+  background: white;
+  border-radius: 16px;
+  padding: 30px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  border: 1px solid #f1f5f9;
+  margin-bottom: 25px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+  width: 100%;
+}
+
+.section-header h2 {
+  margin: 0;
+  color: #1e293b;
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+
+.input-group {
+  margin-bottom: 20px;
+}
+
+.input-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #374151;
+  font-size: 0.9rem;
+}
+
+.input-with-icon {
+  position: relative;
+}
+
+.pnr-input {
+  width: 100%;
+  padding: 15px 20px 15px 50px;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  transition: all 0.3s ease;
+  background: #f8fafc;
+  text-transform: uppercase;
+}
+
+.pnr-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  background: white;
+}
+
+.input-icon {
+  position: absolute;
+  left: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.2rem;
+}
+
+.input-hint {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin-top: 5px;
+}
+
+.button-group {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.btn {
+  padding: 15px 25px;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: white;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #2563eb, #1e40af);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.btn-secondary {
+  background: #f1f5f9;
+  color: #374151;
+  border: 1px solid #e2e8f0;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #e2e8f0;
+  transform: translateY(-2px);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.btn-sm {
+  padding: 10px 16px;
+  font-size: 0.8rem;
+}
+
+/* Alerts */
+.alert {
+  padding: 15px 20px;
+  border-radius: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.alert-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+}
+
+.alert-success {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #16a34a;
+}
+
+.alert-icon {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.alert-content {
+  flex: 1;
+}
+
+.alert-content strong {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.alert-content p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+/* Booking Information */
+.booking-info {
+  background: white;
+  border-radius: 16px;
+  padding: 30px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  border: 1px solid #f1f5f9;
+}
+
+.booking-details {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+}
+
+.detail-section h4 {
+  margin: 0 0 15px 0;
+  color: #1e293b;
+  font-size: 1.1rem;
+  font-weight: 600;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.detail-item label {
+  font-size: 0.8rem;
+  color: #64748b;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.detail-item .value {
+  font-size: 0.95rem;
+  color: #1e293b;
+  font-weight: 600;
+}
+
+.pnr-badge {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  display: inline-block;
+}
+
+.seat-badge {
+  background: #10b981;
+  color: white;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.8rem;
+  display: inline-block;
+}
+
+.status-badge {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-confirmed,
+.status-checked_in {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-pending {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.status-cancelled {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.baggage-tag {
+  background: #f1f5f9;
+  color: #374151;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-family: monospace;
+  font-size: 0.9rem;
+}
+
+.no-booking {
+  text-align: center;
+  padding: 40px 20px;
+  color: #64748b;
+}
+
+.no-booking-icon {
+  font-size: 3rem;
+  margin-bottom: 15px;
+  opacity: 0.5;
+}
+
+.no-booking h4 {
+  margin: 0 0 8px 0;
+  color: #374151;
+  font-size: 1.1rem;
+}
+
+.no-booking p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+/* Today's Check-ins */
+.todays-checkins {
+  background: white;
+  border-radius: 16px;
+  padding: 30px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  border: 1px solid #f1f5f9;
+}
+
+.checkins-list {
+  margin-top: 20px;
+}
+
+.table-container {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid #f1f5f9;
+}
+
+.checkins-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 800px;
+}
+
+.checkins-table th {
+  background: #f8fafc;
+  padding: 15px 20px;
+  text-align: left;
+  font-weight: 600;
+  color: #475569;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.checkins-table td {
+  padding: 15px 20px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #475569;
+  font-size: 0.9rem;
+}
+
+.checkins-table tbody tr {
+  transition: all 0.2s ease;
+}
+
+.checkins-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.passenger-cell .passenger-name {
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+
+.passenger-cell .passenger-phone {
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.time-cell {
+  font-family: monospace;
+  font-weight: 600;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #64748b;
+}
+
+.empty-icon {
+  font-size: 3rem;
+  margin-bottom: 15px;
+  opacity: 0.5;
+}
+
+.empty-state h4 {
+  margin: 0 0 8px 0;
+  color: #374151;
+  font-size: 1.1rem;
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+/* Reports Section */
+.reports-section {
+  background: white;
+  border-radius: 16px;
+  padding: 30px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  border: 1px solid #f1f5f9;
+}
+
+.reports-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 25px;
+  margin-top: 20px;
+}
+
+.report-card {
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 25px;
+  border: 1px solid #e2e8f0;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+}
+
+.report-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+}
+
+.report-icon {
+  font-size: 2rem;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  border-radius: 12px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.report-content {
+  flex: 1;
+}
+
+.report-content h4 {
+  margin: 0 0 8px 0;
+  color: #1e293b;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.report-content p {
+  margin: 0 0 15px 0;
+  color: #64748b;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+/* Loading Spinner */
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid transparent;
+  border-top: 2px solid currentColor;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .operator-sidebar {
+    width: 250px;
+  }
+  
+  .operator-main {
+    width: calc(100vw - 250px);
+  }
+  
+  .metrics-grid {
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .operator-panel-container {
+    flex-direction: column;
+  }
+  
+  .operator-sidebar {
+    width: 100%;
+    height: auto;
+    max-height: 60vh;
+  }
+  
+  .operator-main {
+    width: 100vw;
+    height: calc(100vh - 200px);
+  }
+  
+  .operator-header {
+    flex-direction: column;
+    gap: 15px;
+    text-align: center;
+    padding: 15px 20px;
+  }
+  
+  .header-right {
+    flex-direction: column;
+    width: 100%;
+    gap: 15px;
+  }
+  
+  .search-box input {
+    width: 100%;
+  }
+  
+  .quick-stats {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  
+  .metrics-grid {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+  
+  .button-group {
+    flex-direction: column;
+  }
+  
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .reports-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .operator-sidebar {
+    max-height: 50vh;
+  }
+  
+  .sidebar-header {
+    padding: 20px;
+  }
+  
+  .nav-item {
+    padding: 12px 20px;
+  }
+  
+  .dashboard-section {
+    padding: 20px;
+  }
+  
+  .checkin-section,
+  .booking-info,
+  .todays-checkins,
+  .reports-section {
+    padding: 20px;
+  }
+  
+  .metric-card {
+    padding: 20px;
+  }
+  
+  .metric-icon {
+    width: 50px;
+    height: 50px;
+    font-size: 2rem;
+  }
+  
+  .metric-value {
+    font-size: 1.8rem;
+  }
+}

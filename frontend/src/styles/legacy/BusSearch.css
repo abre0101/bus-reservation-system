@@ -1,0 +1,352 @@
+/* BusSearch.css */
+.bus-search-container {
+  padding: 12rem;
+  min-height: 100vh;
+  background-image: url('https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?ixlib=rb-4.0.3&auto=format&fit=crop&w=2069&q=80');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  position: relative;
+}
+
+/* Add overlay for better readability */
+.bus-search-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 0;
+}
+
+.bus-search-section,
+.bus-search-results-section {
+  position: relative;
+  z-index: 1;
+}
+
+.bus-search-section {
+  background: white;
+  border-radius: 15px;
+  padding: 3rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.bus-search-section h1 {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+  color: #2c3e50;
+}
+
+.bus-search-section p {
+  color: #7f8c8d;
+  margin-bottom: 2rem;
+  font-size: 1.1rem;
+}
+
+.bus-search-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.bus-search-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+.bus-search-form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.bus-search-form-group label {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: #2c3e50;
+}
+
+.bus-search-form-group select {
+  padding: 1rem;
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.3s ease;
+}
+
+.bus-search-form-group select:focus {
+  outline: none;
+  border-color: #3498db;
+}
+
+.bus-search-btn {
+  background: linear-gradient(135deg, #e53e3e, #c53030);
+  color: white;
+  border: none;
+  padding: 1.2rem 2rem;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 1rem;
+}
+
+.bus-search-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(229, 62, 62, 0.3);
+}
+
+.bus-search-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.bus-search-error-message {
+  background: #fee;
+  color: #c53030;
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid #fed7d7;
+  text-align: center;
+}
+
+.bus-search-loading-small {
+  color: #666;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+}
+
+.bus-search-no-dates {
+  color: #666;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+  text-align: center;
+}
+
+/* Results Section */
+.bus-search-results-section {
+  background: white;
+  border-radius: 15px;
+  padding: 2rem;
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.bus-search-results-section h2 {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  color: #2c3e50;
+}
+
+.bus-search-info {
+  color: #7f8c8d;
+  margin-bottom: 2rem;
+  font-size: 1.1rem;
+}
+
+.bus-search-buses-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.bus-search-bus-card {
+  border: 2px solid #f1f3f4;
+  border-radius: 12px;
+  padding: 2rem;
+  transition: all 0.3s ease;
+}
+
+.bus-search-bus-card:hover {
+  border-color: #3498db;
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+}
+
+.bus-search-bus-header {
+  display: flex;
+  justify-content: space-between; /* Fixed: was 'between' */
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.bus-search-bus-header h3 {
+  font-size: 1.5rem;
+  color: #2c3e50;
+  margin: 0;
+}
+
+.bus-search-bus-type {
+  background: #e8f4fd;
+  color: #3498db;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.bus-search-bus-details {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin-bottom: 1.5rem;
+}
+
+.bus-search-time-info,
+.bus-search-fare-info {
+  display: flex;
+  justify-content: space-between;
+}
+
+.bus-search-departure,
+.bus-search-arrival,
+.bus-search-fare,
+.bus-search-seats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bus-search-departure strong,
+.bus-search-arrival strong,
+.bus-search-fare strong,
+.bus-search-seats strong {
+  color: #7f8c8d;
+  font-size: 0.9rem;
+}
+
+.bus-search-departure span,
+.bus-search-arrival span,
+.bus-search-fare span,
+.bus-search-seats span {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.bus-search-fare span {
+  color: #e53e3e;
+}
+
+.bus-search-boarding-points {
+  margin-bottom: 1rem;
+  color: #666;
+  font-size: 0.95rem;
+}
+
+.bus-search-bus-amenities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.bus-search-amenity {
+  background: #f8f9fa;
+  color: #666;
+  padding: 0.4rem 0.8rem;
+  border-radius: 15px;
+  font-size: 0.8rem;
+  border: 1px solid #e9ecef;
+}
+
+.bus-search-book-btn {
+  background: linear-gradient(135deg, #e53e3e, #c53030);
+  color: white;
+  border: none;
+  padding: 1rem 2rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: 100%;
+}
+
+.bus-search-book-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(229, 62, 62, 0.3);
+}
+
+.bus-search-book-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Loading States */
+.bus-search-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+  color: white;
+}
+
+.bus-search-spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-top: 4px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+}
+
+.bus-search-loading-subtitle {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .bus-search-container {
+    padding: 1rem;
+  }
+  
+  .bus-search-section {
+    padding: 2rem 1.5rem;
+  }
+  
+  .bus-search-form-row {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .bus-search-bus-details {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  
+  .bus-search-time-info,
+  .bus-search-fare-info {
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .bus-search-bus-header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+}

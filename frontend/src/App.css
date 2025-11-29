@@ -1,0 +1,48 @@
+/* Custom styles for EthioBus */
+.ethio-flag-gradient {
+  background: linear-gradient(135deg, #078C49 33%, #FCD116 33%, #FCD116 66%, #DA121A 66%);
+}
+
+.loading-spinner {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #078C49;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.seat-available {
+  background-color: #10b981;
+  color: white;
+}
+
+.seat-occupied {
+  background-color: #ef4444;
+  color: white;
+  cursor: not-allowed;
+}
+
+.seat-selected {
+  background-color: #f59e0b;
+  color: white;
+}
+
+.bus-layout {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  max-width: 300px;
+  margin: 0 auto;
+}
+
+.driver-seat {
+  grid-column: 2 / 4;
+  background-color: #6b7280;
+  color: white;
+}

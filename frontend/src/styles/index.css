@@ -1,0 +1,194 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f9fafb;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Loading spinner */
+.loading-spinner {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #078C49;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Seat styles */
+.seat-available {
+  background-color: #10b981;
+  color: white;
+  cursor: pointer;
+}
+
+.seat-available:hover {
+  background-color: #059669;
+}
+
+.seat-occupied {
+  background-color: #ef4444;
+  color: white;
+  cursor: not-allowed;
+}
+
+.seat-selected {
+  background-color: #f59e0b;
+  color: white;
+}
+
+.seat-selected:hover {
+  background-color: #d97706;
+}
+
+/* Bus layout */
+.bus-layout {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  max-width: 300px;
+  margin: 0 auto;
+}
+
+.driver-seat {
+  grid-column: 2 / 4;
+  background-color: #6b7280;
+  color: white;
+  cursor: not-allowed;
+}
+
+/* Status badges */
+.status-badge {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+}
+
+.status-pending {
+  @apply bg-yellow-100 text-yellow-800;
+}
+
+.status-confirmed {
+  @apply bg-green-100 text-green-800;
+}
+
+.status-checked_in {
+  @apply bg-blue-100 text-blue-800;
+}
+
+.status-cancelled {
+  @apply bg-red-100 text-red-800;
+}
+
+.status-completed {
+  @apply bg-gray-100 text-gray-800;
+}
+
+/* Custom components */
+@layer components {
+  .btn-primary {
+    @apply bg-ethio-green text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .btn-secondary {
+    @apply bg-ethio-yellow text-ethio-green px-4 py-2 rounded-lg font-semibold hover:bg-yellow-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .btn-outline {
+    @apply border border-ethio-green text-ethio-green px-4 py-2 rounded-lg font-semibold hover:bg-ethio-green hover:text-white transition-colors;
+  }
+  
+  .btn-danger {
+    @apply bg-red-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-700 transition-colors;
+  }
+  
+  .card {
+    @apply bg-white rounded-lg shadow-md p-6;
+  }
+  
+  .input-field {
+    @apply w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-ethio-green focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed;
+  }
+  
+  .select-field {
+    @apply w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-ethio-green focus:border-transparent bg-white;
+  }
+  
+  .form-label {
+    @apply block text-sm font-medium text-gray-700 mb-2;
+  }
+  
+  .form-error {
+    @apply text-red-600 text-sm mt-1;
+  }
+  
+  .table-header {
+    @apply bg-gray-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider;
+  }
+  
+  .table-cell {
+    @apply px-6 py-4 whitespace-nowrap text-sm text-gray-900;
+  }
+}
+
+/* Print styles for tickets */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  .ticket-print {
+    background: white;
+    color: black;
+    padding: 20px;
+  }
+}
+
+/* Animation for notifications */
+.notification-enter {
+  transform: translateX(100%);
+}
+
+.notification-enter-active {
+  transform: translateX(0);
+  transition: transform 300ms ease-in-out;
+}
+
+.notification-exit {
+  transform: translateX(0);
+}
+
+.notification-exit-active {
+  transform: translateX(100%);
+  transition: transform 300ms ease-in-out;
+}

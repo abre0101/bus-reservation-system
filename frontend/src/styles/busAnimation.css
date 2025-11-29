@@ -1,0 +1,221 @@
+/* Enhanced Bus Animation Styles */
+
+@keyframes float {
+  0%, 100% { 
+    transform: translateY(0px) translateX(0px) rotate(0deg); 
+  }
+  33% { 
+    transform: translateY(-30px) translateX(20px) rotate(3deg); 
+  }
+  66% { 
+    transform: translateY(-15px) translateX(-15px) rotate(-3deg); 
+  }
+}
+
+@keyframes float-delayed {
+  0%, 100% { 
+    transform: translateY(0px) translateX(0px) scale(1); 
+  }
+  33% { 
+    transform: translateY(-40px) translateX(-25px) scale(1.05); 
+  }
+  66% { 
+    transform: translateY(-20px) translateX(20px) scale(0.95); 
+  }
+}
+
+@keyframes road-scroll {
+  0% { 
+    transform: translateX(0); 
+  }
+  100% { 
+    transform: translateX(-240px); 
+  }
+}
+
+@keyframes bus-drive {
+  0% { 
+    transform: translateX(-200px) translateY(0px); 
+  }
+  48% { 
+    transform: translateX(calc(50vw - 60px)) translateY(0px); 
+  }
+  52% { 
+    transform: translateX(calc(50vw - 60px)) translateY(-5px); 
+  }
+  100% { 
+    transform: translateX(calc(100vw + 200px)) translateY(0px); 
+  }
+}
+
+@keyframes bus-drive-slow {
+  0% { 
+    transform: translateX(-250px) translateY(0px) scale(0.9); 
+  }
+  48% { 
+    transform: translateX(calc(50vw - 80px)) translateY(0px) scale(0.9); 
+  }
+  52% { 
+    transform: translateX(calc(50vw - 80px)) translateY(-3px) scale(0.9); 
+  }
+  100% { 
+    transform: translateX(calc(100vw + 250px)) translateY(0px) scale(0.9); 
+  }
+}
+
+@keyframes bus-drive-fast {
+  0% { 
+    transform: translateX(-180px) translateY(0px) scale(1.1); 
+  }
+  48% { 
+    transform: translateX(calc(50vw - 50px)) translateY(0px) scale(1.1); 
+  }
+  52% { 
+    transform: translateX(calc(50vw - 50px)) translateY(-6px) scale(1.1); 
+  }
+  100% { 
+    transform: translateX(calc(100vw + 180px)) translateY(0px) scale(1.1); 
+  }
+}
+
+@keyframes spin-slow {
+  0% { 
+    transform: rotate(0deg); 
+  }
+  100% { 
+    transform: rotate(360deg); 
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { 
+    opacity: 0.6; 
+    box-shadow: 0 0 10px currentColor; 
+  }
+  50% { 
+    opacity: 1; 
+    box-shadow: 0 0 20px currentColor; 
+  }
+}
+
+@keyframes shimmer {
+  0% { 
+    background-position: -1000px 0; 
+  }
+  100% { 
+    background-position: 1000px 0; 
+  }
+}
+
+/* Animation Classes */
+.animate-float {
+  animation: float 10s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: float-delayed 12s ease-in-out infinite;
+}
+
+.animate-road-scroll {
+  animation: road-scroll 4s linear infinite;
+}
+
+.animate-bus-drive {
+  animation: bus-drive 25s linear infinite;
+}
+
+.animate-bus-drive-slow {
+  animation: bus-drive-slow 35s linear infinite;
+  animation-delay: 8s;
+}
+
+.animate-bus-drive-fast {
+  animation: bus-drive-fast 18s linear infinite;
+  animation-delay: 15s;
+}
+
+.animate-spin-slow {
+  animation: spin-slow 1s linear infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-shimmer {
+  animation: shimmer 3s linear infinite;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 100%
+  );
+  background-size: 1000px 100%;
+}
+
+/* Gradient Backgrounds */
+.bg-gradient-radial {
+  background: radial-gradient(
+    circle at center,
+    rgba(59, 130, 246, 0.15) 0%,
+    rgba(99, 102, 241, 0.1) 50%,
+    transparent 100%
+  );
+}
+
+.bg-gradient-mesh {
+  background-image: 
+    radial-gradient(at 20% 30%, rgba(59, 130, 246, 0.2) 0px, transparent 50%),
+    radial-gradient(at 80% 70%, rgba(99, 102, 241, 0.2) 0px, transparent 50%),
+    radial-gradient(at 50% 50%, rgba(139, 92, 246, 0.15) 0px, transparent 50%),
+    radial-gradient(at 10% 80%, rgba(236, 72, 153, 0.15) 0px, transparent 50%);
+}
+
+/* Glass morphism effects */
+.glass-card {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 
+    0 8px 32px 0 rgba(31, 38, 135, 0.15),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.5);
+}
+
+.glass-card-dark {
+  background: rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 
+    0 8px 32px 0 rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
+}
+
+/* Hover effects */
+.hover-lift {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hover-lift:hover {
+  transform: translateY(-8px) scale(1.02);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  @keyframes bus-drive {
+    0% { transform: translateX(-150px) translateY(0px) scale(0.8); }
+    100% { transform: translateX(calc(100vw + 150px)) translateY(0px) scale(0.8); }
+  }
+  
+  @keyframes bus-drive-slow {
+    0% { transform: translateX(-180px) translateY(0px) scale(0.7); }
+    100% { transform: translateX(calc(100vw + 180px)) translateY(0px) scale(0.7); }
+  }
+  
+  @keyframes bus-drive-fast {
+    0% { transform: translateX(-120px) translateY(0px) scale(0.9); }
+    100% { transform: translateX(calc(100vw + 120px)) translateY(0px) scale(0.9); }
+  }
+}
