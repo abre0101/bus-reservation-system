@@ -1,9 +1,9 @@
 """
-Data normalizer utility to handle different field name formats
+Data normalizer utility - uses only snake_case field names
 """
 
 def normalize_schedule(schedule):
-    """Normalize schedule data to use consistent field names"""
+    """Normalize schedule data to use consistent snake_case field names"""
     if not schedule:
         return None
     
@@ -11,25 +11,25 @@ def normalize_schedule(schedule):
         '_id': str(schedule.get('_id')),
         'id': str(schedule.get('_id')),
         # Route info
-        'route_id': schedule.get('route_id') or schedule.get('routeId'),
+        'route_id': schedule.get('route_id'),
         'route_name': schedule.get('route_name'),
-        'origin_city': schedule.get('origin_city') or schedule.get('originCity') or schedule.get('departure_city'),
-        'destination_city': schedule.get('destination_city') or schedule.get('destinationCity') or schedule.get('arrival_city'),
+        'origin_city': schedule.get('origin_city'),
+        'destination_city': schedule.get('destination_city'),
         # Bus info
-        'bus_id': schedule.get('bus_id') or schedule.get('busId'),
+        'bus_id': schedule.get('bus_id'),
         'bus_type': schedule.get('bus_type'),
         'bus_number': schedule.get('bus_number'),
         'plate_number': schedule.get('plate_number'),
         # Time info
         'departure_date': schedule.get('departure_date'),
-        'departure_time': schedule.get('departure_time') or schedule.get('departureTime'),
-        'arrival_time': schedule.get('arrival_time') or schedule.get('arrivalTime'),
+        'departure_time': schedule.get('departure_time'),
+        'arrival_time': schedule.get('arrival_time'),
         # Capacity
-        'total_seats': schedule.get('total_seats') or schedule.get('totalSeats'),
-        'available_seats': schedule.get('available_seats') or schedule.get('availableSeats'),
-        'booked_seats': schedule.get('booked_seats') or schedule.get('bookedSeats', 0),
+        'total_seats': schedule.get('total_seats'),
+        'available_seats': schedule.get('available_seats'),
+        'booked_seats': schedule.get('booked_seats', 0),
         # Pricing
-        'fare_birr': schedule.get('fare_birr') or schedule.get('baseFare'),
+        'fare_birr': schedule.get('fare_birr'),
         # Status
         'status': schedule.get('status', 'scheduled'),
         'amenities': schedule.get('amenities', []),
@@ -39,14 +39,14 @@ def normalize_schedule(schedule):
     }
 
 def normalize_booking(booking):
-    """Normalize booking data to use consistent field names"""
+    """Normalize booking data to use consistent snake_case field names"""
     if not booking:
         return None
     
     return {
         '_id': str(booking.get('_id')),
         'id': str(booking.get('_id')),
-        'pnr_number': booking.get('pnr_number') or booking.get('booking_reference'),
+        'pnr_number': booking.get('pnr_number'),
         'schedule_id': booking.get('schedule_id'),
         'user_id': booking.get('user_id'),
         # Passenger info
@@ -57,20 +57,21 @@ def normalize_booking(booking):
         'seat_number': booking.get('seat_number'),
         'seat_numbers': booking.get('seat_numbers', []),
         # Trip info
-        'departure_city': booking.get('departure_city') or booking.get('origin_city'),
-        'arrival_city': booking.get('arrival_city') or booking.get('destination_city'),
-        'travel_date': booking.get('travel_date') or booking.get('departure_date'),
+        'departure_city': booking.get('departure_city'),
+        'arrival_city': booking.get('arrival_city'),
+        'travel_date': booking.get('travel_date'),
         'departure_time': booking.get('departure_time'),
         'arrival_time': booking.get('arrival_time'),
         # Payment
         'total_amount': booking.get('total_amount'),
-        'base_fare': booking.get('base_fare') or booking.get('fare_birr'),
+        'base_fare': booking.get('base_fare'),
         'payment_status': booking.get('payment_status'),
         'payment_method': booking.get('payment_method'),
         # Bus info
         'bus_type': booking.get('bus_type'),
         'bus_number': booking.get('bus_number'),
         'plate_number': booking.get('plate_number'),
+        'bus_name': booking.get('bus_name'),
         # Status
         'status': booking.get('status'),
         'checked_in': booking.get('checked_in', False),
@@ -78,6 +79,17 @@ def normalize_booking(booking):
         'has_baggage': booking.get('has_baggage', False),
         'baggage_weight': booking.get('baggage_weight', 0),
         'baggage_fee': booking.get('baggage_fee', 0),
+        # Cancellation info
+        'cancellation_requested': booking.get('cancellation_requested', False),
+        'cancellation_status': booking.get('cancellation_status'),
+        'cancellation_reason': booking.get('cancellation_reason'),
+        'cancellation_request_date': booking.get('cancellation_request_date'),
+        'cancellation_approved_at': booking.get('cancellation_approved_at'),
+        'cancellation_rejected_at': booking.get('cancellation_rejected_at'),
+        'cancellation_rejection_reason': booking.get('cancellation_rejection_reason'),
+        'refund_amount': booking.get('refund_amount'),
+        'refund_method': booking.get('refund_method'),
+        'refund_status': booking.get('refund_status'),
         # User details
         'user': booking.get('user', {}),
         # Timestamps

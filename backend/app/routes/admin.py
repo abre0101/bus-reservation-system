@@ -74,8 +74,8 @@ def is_schedule_completed(schedule):
         now = datetime.utcnow()
         
         # Get departure date and time
-        departure_date = schedule.get('departureDate')
-        departure_time = schedule.get('departureTime') or schedule.get('departure_time', '00:00')
+        departure_date = schedule.get('departure_date')
+        departure_time = schedule.get('departure_time', '00:00')
         
         if not departure_date:
             return True  # Consider invalid schedule as completed
@@ -359,7 +359,7 @@ def get_reports():
         # ENHANCED: Get schedule and maintenance data
         schedules = list(mongo.db.busschedules.find({
             'status': 'scheduled',
-            'departureDate': {'$gte': start_date.strftime('%Y-%m-%d'), '$lt': end_date.strftime('%Y-%m-%d')}
+            'departure_date': {'$gte': start_date.strftime('%Y-%m-%d'), '$lt': end_date.strftime('%Y-%m-%d')}
         }))
         
         # Apply filtering based on parameters
@@ -488,8 +488,8 @@ def get_maintenance_analytics():
                 affected_schedules.append({
                     'schedule_id': str(schedule.get('_id')),
                     'bus_number': bus_data.get('bus_number') if bus_data else 'Unknown',
-                    'departure_date': schedule.get('departureDate'),
-                    'route': f"{schedule.get('originCity', 'Unknown')} → {schedule.get('destinationCity', 'Unknown')}",
+                    'departure_date': schedule.get('departure_date'),
+                    'route': f"{schedule.get('origin_city', 'Unknown')} → {schedule.get('destination_city', 'Unknown')}",
                     'maintenance_reason': bus_data.get('maintenance_notes', 'Unknown') if bus_data else 'Unknown'
                 })
         
@@ -551,7 +551,7 @@ def get_schedule_availability_analytics():
             availability_analysis['available_schedules'] += 1
             
             # Track by route
-            route_name = f"{schedule.get('originCity', 'Unknown')} → {schedule.get('destinationCity', 'Unknown')}"
+            route_name = f"{schedule.get('origin_city', 'Unknown')} → {schedule.get('destination_city', 'Unknown')}"
             availability_analysis['availability_by_route'][route_name] = availability_analysis['availability_by_route'].get(route_name, 0) + 1
         
         # Calculate percentages
@@ -666,6 +666,62 @@ def get_all_entities(entity):
 # CRUD OPERATIONS
 # =========================================================================
 
+def check_driver_conflict_admin(driver_name, departure_date, schedule_id=None):
+    """Check if driver is already assigned to another schedule on the same day"""
+    if not driver_name or not driver_name.strip():
+        return None  # No driver assigned, no conflict
+    
+    try:
+        # Parse the departure date to get the day
+        if isinstance(departure_date, str):
+            date_obj = datetime.strptime(departure_date.split('T')[0], '%Y-%m-%d')
+        else:
+            date_obj = departure_date
+        
+        # Get start and end of the day
+        start_of_day = date_obj.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_day = date_obj.replace(hour=23, minute=59, second=59, microsecond=999999)
+        
+        # Build query to find schedules with same driver on same day
+        query = {
+            'driver_name': driver_name.strip(),
+            'departure_date': {
+                '$gte': start_of_day,
+                '$lte': end_of_day
+            },
+            'status': {'$nin': ['cancelled', 'completed']}
+        }
+        
+        # If updating, exclude the current schedule
+        if schedule_id:
+            query['_id'] = {'$ne': ObjectId(schedule_id)}
+        
+        # Check for conflicts
+        conflicting_schedules = list(mongo.db.busschedules.find(query))
+        
+        if conflicting_schedules:
+            conflict_details = []
+            for schedule in conflicting_schedules:
+                conflict_details.append({
+                    'route': f"{schedule.get('origin_city', 'N/A')} → {schedule.get('destination_city', 'N/A')}",
+                    'departure_time': schedule.get('departure_time', 'N/A'),
+                    'bus_number': schedule.get('bus_number', 'N/A')
+                })
+            
+            return {
+                'has_conflict': True,
+                'driver_name': driver_name,
+                'date': date_obj.strftime('%Y-%m-%d'),
+                'conflicts': conflict_details
+            }
+        
+        return None  # No conflict
+        
+    except Exception as e:
+        print(f"❌ Error checking driver conflict: {e}")
+        return None
+
+
 @admin_bp.route('/<entity>', methods=['POST'])
 @jwt_required()
 def create_entity(entity):
@@ -679,6 +735,43 @@ def create_entity(entity):
             return jsonify({'error': 'No data provided'}), 400
         
         collection_name = get_collection(entity)
+        
+        # Special handling for schedules - check driver conflicts
+        if entity == 'schedule':
+            driver_name = data.get('driver_name', '').strip()
+            departure_date = data.get('departure_date') or data.get('departureDate')
+            
+            if driver_name and departure_date:
+                conflict = check_driver_conflict_admin(driver_name, departure_date)
+                if conflict:
+                    conflict_info = conflict['conflicts'][0]
+                    return jsonify({
+                        'error': f"Driver '{driver_name}' is already assigned to another schedule on {conflict['date']}",
+                        'conflict_details': {
+                            'driver': driver_name,
+                            'date': conflict['date'],
+                            'existing_schedule': {
+                                'route': conflict_info['route'],
+                                'departure_time': conflict_info['departure_time'],
+                                'bus_number': conflict_info['bus_number']
+                            }
+                        }
+                    }), 409
+            
+            # ✅ Look up driver_id from driver_name if provided
+            if driver_name and not data.get('driver_id'):
+                driver = mongo.db.users.find_one({
+                    'role': 'driver',
+                    '$or': [
+                        {'full_name': driver_name},
+                        {'name': driver_name}
+                    ]
+                })
+                if driver:
+                    data['driver_id'] = str(driver['_id'])
+                    print(f"✅ Found driver_id {data['driver_id']} for driver {driver_name}")
+                else:
+                    print(f"⚠️ Driver not found: {driver_name}")
         
         # Add timestamps
         data['created_at'] = datetime.utcnow()
@@ -711,6 +804,33 @@ def update_entity(entity, item_id):
             return jsonify({'error': 'No data provided'}), 400
         
         collection_name = get_collection(entity)
+        
+        # Special handling for schedules - check driver conflicts
+        if entity == 'schedule':
+            item_id_obj = safe_object_id(item_id)
+            existing_schedule = mongo.db[collection_name].find_one({'_id': item_id_obj})
+            
+            if existing_schedule:
+                driver_name = data.get('driver_name', existing_schedule.get('driver_name', '')).strip()
+                departure_date = data.get('departure_date') or data.get('departureDate') or existing_schedule.get('departure_date')
+                
+                if driver_name and departure_date:
+                    conflict = check_driver_conflict_admin(driver_name, departure_date, item_id)
+                    if conflict:
+                        conflict_info = conflict['conflicts'][0]
+                        return jsonify({
+                            'error': f"Driver '{driver_name}' is already assigned to another schedule on {conflict['date']}",
+                            'conflict_details': {
+                                'driver': driver_name,
+                                'date': conflict['date'],
+                                'existing_schedule': {
+                                    'route': conflict_info['route'],
+                                    'departure_time': conflict_info['departure_time'],
+                                    'bus_number': conflict_info['bus_number']
+                                }
+                            }
+                        }), 409
+        
         data['updated_at'] = datetime.utcnow()
         
         item_id_obj = safe_object_id(item_id)
@@ -775,7 +895,44 @@ def get_all_routes_legacy():
 @admin_bp.route('/schedules', methods=['GET'])
 @jwt_required()
 def get_all_schedules_legacy():
-    return get_all_entities('schedule')
+    """Get all schedules with enriched driver information"""
+    try:
+        if not is_admin():
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        schedules = list(mongo.db.busschedules.find({}))
+        
+        # Enrich each schedule with driver information
+        for schedule in schedules:
+            driver_id = schedule.get('driver_id') or schedule.get('driverId')
+            
+            if driver_id:
+                try:
+                    # Try to fetch driver details
+                    driver = mongo.db.users.find_one({'_id': ObjectId(driver_id)})
+                    if driver:
+                        schedule['driver_name'] = driver.get('full_name') or driver.get('name') or 'Unknown Driver'
+                        schedule['driver_phone'] = driver.get('phone') or driver.get('phone_number')
+                    elif not schedule.get('driver_name'):
+                        # If driver not found and no driver_name, mark as not assigned
+                        schedule['driver_name'] = 'Not assigned'
+                        schedule['driver_phone'] = None
+                except Exception as e:
+                    print(f"Error fetching driver info for schedule {schedule.get('_id')}: {e}")
+                    if not schedule.get('driver_name'):
+                        schedule['driver_name'] = 'Not assigned'
+                        schedule['driver_phone'] = None
+            elif not schedule.get('driver_name'):
+                # No driver_id and no driver_name
+                schedule['driver_name'] = 'Not assigned'
+                schedule['driver_phone'] = None
+        
+        serialized_schedules = [serialize_doc(schedule) for schedule in schedules]
+        return jsonify({'schedules': serialized_schedules}), 200
+        
+    except Exception as e:
+        print(f"Error in get_all_schedules_legacy: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @admin_bp.route('/bookings', methods=['GET'])
 @jwt_required()

@@ -21,7 +21,7 @@ def is_schedule_completed(schedule):
         now = datetime.utcnow()
         
         # Get departure date and time
-        departure_date = schedule.get('departureDate')
+        departure_date = schedule.get('departure_date')
         departure_time = schedule.get('departureTime') or schedule.get('departure_time', '00:00')
         
         if not departure_date:
@@ -180,16 +180,19 @@ def create_route():
         
         data = request.get_json()
         
-        # Validate required fields
-        required_fields = ['name', 'originCity', 'destinationCity', 'distanceKm', 'estimatedDurationHours', 'baseFareBirr']
-        for field in required_fields:
-            if not data.get(field):
-                return jsonify({'error': f'{field} is required'}), 400
+        # Validate required fields - support both camelCase and snake_case
+        origin_city = data.get('origin_city') or data.get('originCity')
+        destination_city = data.get('destination_city') or data.get('destinationCity')
+        distance_km = data.get('distance_km') or data.get('distanceKm')
+        estimated_duration_hours = data.get('estimated_duration_hours') or data.get('estimatedDurationHours')
+        
+        if not all([data.get('name'), origin_city, destination_city, distance_km, estimated_duration_hours]):
+            return jsonify({'error': 'name, origin_city, destination_city, distance_km, and estimated_duration_hours are required'}), 400
         
         # Check if route already exists
         existing_route = mongo.db.routes.find_one({
-            'originCity': data['originCity'],
-            'destinationCity': data['destinationCity']
+            'origin_city': origin_city,
+            'destination_city': destination_city
         })
         
         if existing_route:
@@ -197,16 +200,15 @@ def create_route():
         
         route = {
             'name': data['name'],
-            'originCity': data['originCity'],
-            'destinationCity': data['destinationCity'],
-            'distanceKm': data['distanceKm'],
-            'estimatedDurationHours': data['estimatedDurationHours'],
-            'baseFareBirr': data['baseFareBirr'],
+            'origin_city': origin_city,
+            'destination_city': destination_city,
+            'distance_km': distance_km,
+            'estimated_duration_hours': estimated_duration_hours,
             'stops': data.get('stops', []),
             'description': data.get('description', ''),
             'is_active': True,
-            'createdAt': datetime.utcnow(),
-            'updatedAt': datetime.utcnow()
+            'created_at': datetime.utcnow(),
+            'updated_at': datetime.utcnow()
         }
         
         result = mongo.db.routes.insert_one(route)
@@ -250,10 +252,10 @@ def get_route(route_id):
         # Find next available schedule
         if valid_schedules:
             # Sort by departure date
-            valid_schedules.sort(key=lambda x: x.get('departureDate', ''))
+            valid_schedules.sort(key=lambda x: x.get('departure_date', ''))
             next_schedule = valid_schedules[0]
             route['schedule_info']['next_available'] = {
-                'date': next_schedule.get('departureDate'),
+                'date': next_schedule.get('departure_date'),
                 'time': next_schedule.get('departureTime')
             }
         
@@ -312,7 +314,7 @@ def deactivate_route(route_id):
         # Cancel future schedules for this route
         future_schedules = mongo.db.busschedules.find({
             'routeId': route_id,
-            'departureDate': {'$gte': datetime.utcnow().strftime('%Y-%m-%d')},
+            'departure_date': {'$gte': datetime.utcnow().strftime('%Y-%m-%d')},
             'status': 'scheduled'
         })
         
@@ -364,8 +366,8 @@ def activate_route(route_id):
 def get_cities():
     """Get all available cities from routes with counts"""
     try:
-        source_cities = mongo.db.routes.distinct('originCity', {'is_active': True})
-        destination_cities = mongo.db.routes.distinct('destinationCity', {'is_active': True})
+        source_cities = mongo.db.routes.distinct('origin_city', {'is_active': True})
+        destination_cities = mongo.db.routes.distinct('destination_city', {'is_active': True})
         
         # Combine and remove duplicates
         all_cities = list(set(source_cities + destination_cities))
@@ -376,13 +378,13 @@ def get_cities():
         for city in all_cities:
             # Count routes where this city is origin
             origin_count = mongo.db.routes.count_documents({
-                'originCity': city,
+                'origin_city': city,
                 'is_active': True
             })
             
             # Count routes where this city is destination
             destination_count = mongo.db.routes.count_documents({
-                'destinationCity': city,
+                'destination_city': city,
                 'is_active': True
             })
             
@@ -413,8 +415,8 @@ def search_routes():
             return jsonify({'error': 'Origin and destination are required'}), 400
         
         routes = list(mongo.db.routes.find({
-            'originCity': origin,
-            'destinationCity': destination,
+            'origin_city': origin,
+            'destination_city': destination,
             'is_active': True
         }))
         
@@ -435,10 +437,10 @@ def search_routes():
                 
                 # Add next available schedule info
                 if valid_schedules:
-                    valid_schedules.sort(key=lambda x: x.get('departureDate', ''))
+                    valid_schedules.sort(key=lambda x: x.get('departure_date', ''))
                     next_schedule = valid_schedules[0]
                     route['next_available'] = {
-                        'date': next_schedule.get('departureDate'),
+                        'date': next_schedule.get('departure_date'),
                         'time': next_schedule.get('departureTime'),
                         'fare': next_schedule.get('fareBirr')
                     }
@@ -472,14 +474,14 @@ def get_route_schedules(route_id):
         
         # Add date range filter
         if date_from:
-            query['departureDate'] = {'$gte': date_from}
+            query['departure_date'] = {'$gte': date_from}
         if date_to:
-            if 'departureDate' in query:
-                query['departureDate']['$lte'] = date_to
+            if 'departure_date' in query:
+                query['departure_date']['$lte'] = date_to
             else:
-                query['departureDate'] = {'$lte': date_to}
+                query['departure_date'] = {'$lte': date_to}
         
-        schedules_cursor = mongo.db.busschedules.find(query).sort('departureDate', 1)
+        schedules_cursor = mongo.db.busschedules.find(query).sort('departure_date', 1)
         schedules = list(schedules_cursor)
         
         # Apply filtering if not including all
@@ -528,7 +530,7 @@ def get_route_schedules(route_id):
                 '_id': str(schedule['_id']),
                 'departure_time': schedule.get('departureTime'),
                 'arrival_time': schedule.get('arrivalTime'),
-                'departure_date': schedule.get('departureDate'),
+                'departure_date': schedule.get('departure_date'),
                 'available_seats': schedule.get('availableSeats'),
                 'fare': schedule.get('fareBirr'),
                 'status': schedule.get('status'),
@@ -556,8 +558,8 @@ def get_route_schedules(route_id):
             'route': {
                 '_id': str(route['_id']) if route else route_id,
                 'name': route.get('name') if route else 'Unknown',
-                'originCity': route.get('originCity') if route else 'Unknown',
-                'destinationCity': route.get('destinationCity') if route else 'Unknown'
+                'origin_city': route.get('origin_city') if route else 'Unknown',
+                'destination_city': route.get('destination_city') if route else 'Unknown'
             } if route else None,
             'filters': {
                 'include_completed': include_completed,
@@ -583,8 +585,8 @@ def get_route_availability(route_id):
         schedules = list(mongo.db.busschedules.find({
             'routeId': route_id,
             'status': 'scheduled',
-            'departureDate': {'$gte': datetime.utcnow().strftime('%Y-%m-%d')}
-        }).sort('departureDate', 1))
+            'departure_date': {'$gte': datetime.utcnow().strftime('%Y-%m-%d')}
+        }).sort('departure_date', 1))
         
         # Filter valid schedules
         valid_schedules = filter_valid_schedules(schedules)
@@ -600,12 +602,12 @@ def get_route_availability(route_id):
                 'total_schedules': len(schedules),
                 'available_schedules': len(valid_schedules),
                 'availability_percentage': round((len(valid_schedules) / len(schedules)) * 100, 2) if schedules else 0,
-                'next_available_date': valid_schedules[0].get('departureDate') if valid_schedules else None,
+                'next_available_date': valid_schedules[0].get('departure_date') if valid_schedules else None,
                 'has_available_schedules': len(valid_schedules) > 0
             },
             'schedule_dates': list(set([
-                s.get('departureDate').strftime('%Y-%m-%d') if isinstance(s.get('departureDate'), datetime) 
-                else str(s.get('departureDate')) 
+                s.get('departure_date').strftime('%Y-%m-%d') if isinstance(s.get('departure_date'), datetime) 
+                else str(s.get('departure_date')) 
                 for s in valid_schedules
             ])) if valid_schedules else []
         }), 200

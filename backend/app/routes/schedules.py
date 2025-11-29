@@ -19,8 +19,8 @@ def is_schedule_completed(schedule):
         now = datetime.utcnow()
         
         # Get departure date and time
-        departure_date = schedule.get('departureDate')
-        departure_time = schedule.get('departureTime') or schedule.get('departure_time', '00:00')
+        departure_date = schedule.get('departure_date')
+        departure_time = schedule.get('departure_time', '00:00')
         
         if not departure_date:
             print(f"❌ No departure date for schedule {schedule.get('_id')}")
@@ -85,8 +85,8 @@ def is_bus_under_maintenance(schedule, bus_data=None):
             if bus_status.lower() in ['maintenance', 'inactive', 'under_maintenance']:
                 return True
             
-            # Check isActive field
-            if bus_data.get('isActive') is False:
+            # Check is_active field
+            if bus_data.get('is_active') is False:
                 return True
         
         # Check schedule-specific maintenance status
@@ -115,7 +115,7 @@ def filter_valid_schedules(schedules):
                 continue
             
             # Check bus maintenance status - be more lenient
-            bus_id = schedule.get('busId')
+            bus_id = schedule.get('bus_id')
             bus_data = None
             
             if bus_id:
@@ -171,8 +171,8 @@ def get_available_cities():
     """Get all unique cities from routes"""
     try:
         # Get unique cities from both origin and destination
-        origin_cities = list(mongo.db.routes.distinct('originCity'))
-        destination_cities = list(mongo.db.routes.distinct('destinationCity'))
+        origin_cities = list(mongo.db.routes.distinct('origin_city'))
+        destination_cities = list(mongo.db.routes.distinct('destination_city'))
         
         # Combine and remove duplicates
         all_cities = origin_cities + destination_cities
@@ -199,8 +199,8 @@ def get_available_cities():
 def get_available_dates():
     """Get available dates for a specific route - FIXED VERSION"""
     try:
-        origin_city = request.args.get('originCity')
-        destination_city = request.args.get('destinationCity')
+        origin_city = request.args.get('origin_city') or request.args.get('originCity')
+        destination_city = request.args.get('destination_city') or request.args.get('destinationCity')
         
         print(f"🔍=== DATES ENDPOINT CALLED ===")
         print(f"📅 Searching dates for '{origin_city}' → '{destination_city}'")
@@ -213,12 +213,16 @@ def get_available_dates():
             })
             return add_cors_headers(response)
         
-        # FIXED: Use snake_case field names that match the database
+        # FIXED: Don't query for available_seats since it's calculated dynamically
+        # Get today's date for filtering
+        from datetime import datetime
+        today = datetime.now().strftime('%Y-%m-%d')
+        
         schedules_query = {
             'origin_city': origin_city,
             'destination_city': destination_city,
-            'status': 'scheduled',
-            'available_seats': {'$gt': 0}
+            'status': {'$in': ['scheduled', 'boarding', 'active']},
+            'departure_date': {'$gte': today}  # Only future/today schedules
         }
         
         print(f"🔍 Direct schedules query: {schedules_query}")
@@ -226,8 +230,30 @@ def get_available_dates():
         schedules = list(mongo.db.busschedules.find(schedules_query))
         print(f"📊 Direct schedules found: {len(schedules)}")
         
+        # Filter schedules that have available seats
+        schedules_with_seats = []
         for schedule in schedules:
-            print(f"   Schedule: {schedule['_id']}, Date: {schedule.get('departureDate')}, Seats: {schedule.get('availableSeats')}")
+            schedule_id = str(schedule['_id'])
+            total_seats = schedule.get('total_seats', 45)
+            
+            # Count confirmed bookings
+            booked_count = mongo.db.bookings.count_documents({
+                'schedule_id': schedule_id,
+                'status': {'$in': ['confirmed', 'checked_in']}
+            })
+            
+            available = total_seats - booked_count
+            if available > 0:
+                schedules_with_seats.append(schedule)
+                print(f"   ✅ Schedule {schedule_id}: {available}/{total_seats} seats available")
+            else:
+                print(f"   ❌ Schedule {schedule_id}: FULL ({booked_count}/{total_seats})")
+        
+        schedules = schedules_with_seats
+        print(f"📊 Schedules with available seats: {len(schedules)}")
+        
+        for schedule in schedules:
+            print(f"   Schedule: {schedule['_id']}, Date: {schedule.get('departure_date')}, Seats: {schedule.get('availableSeats')}")
         
         # Filter out completed schedules and maintenance buses
         valid_schedules = filter_valid_schedules(schedules)
@@ -237,7 +263,7 @@ def get_available_dates():
         dates = set()
         for schedule in valid_schedules:
             # Check both datetime and string date fields
-            departure_date = schedule.get('departureDate') or schedule.get('departure_date')
+            departure_date = schedule.get('departure_date') or schedule.get('departure_date')
             if departure_date:
                 try:
                     # Handle different date formats
@@ -269,8 +295,8 @@ def get_available_dates():
             "dates": sorted_dates,
             "total": len(sorted_dates),
             "route": {
-                "originCity": origin_city,
-                "destinationCity": destination_city
+                "origin_city": origin_city,
+                "destination_city": destination_city
             },
             "debug_info": {
                 "schedules_found": len(schedules),
@@ -303,8 +329,8 @@ def handle_options():
 def get_schedules():
     """Get schedules with filtering for maintenance and past dates"""
     try:
-        origin_city = request.args.get('originCity')
-        destination_city = request.args.get('destinationCity')
+        origin_city = request.args.get('origin_city') or request.args.get('originCity')
+        destination_city = request.args.get('destination_city') or request.args.get('destinationCity')
         travel_date = request.args.get('date')
         include_completed = request.args.get('include_completed', 'false').lower() == 'true'
         include_maintenance = request.args.get('include_maintenance', 'false').lower() == 'true'
@@ -383,9 +409,9 @@ def get_schedules():
         })
         
         # Match stage for filtering (using snake_case field names)
+        # Don't filter by available_seats here - it's calculated dynamically from bookings
         match_stage = {
-            'status': 'scheduled',
-            'available_seats': {'$gt': 0}
+            'status': {'$in': ['scheduled', 'boarding', 'active']}
         }
         
         # Date filtering
@@ -397,7 +423,7 @@ def get_schedules():
                 
                 # Match against both string and datetime formats
                 match_stage['$or'] = [
-                    {'departureDate': {'$gte': start_date, '$lt': end_date}},
+                    {'departure_date': {'$gte': start_date, '$lt': end_date}},
                     {'departure_date': travel_date}
                 ]
             except ValueError as e:
@@ -413,38 +439,37 @@ def get_schedules():
         pipeline.append({
             '$project': {
                 '_id': {'$toString': '$_id'},
-                'routeId': {'$toString': '$route_id'},
-                'busId': {'$toString': '$bus_id'},
-                'busType': '$bus_type',
-                'busNumber': '$bus_number',
-                'departureTime': '$departure_time',
-                'arrivalTime': '$arrival_time',
-                'departureDate': '$departureDate',
+                'route_id': {'$toString': '$route_id'},
+                'bus_id': {'$toString': '$bus_id'},
+                'bus_type': '$bus_type',
+                'bus_number': '$bus_number',
+                'plate_number': '$plate_number',
+                'departure_time': '$departure_time',
+                'arrival_time': '$arrival_time',
                 'departure_date': '$departure_date',
-                'availableSeats': '$available_seats',
-                'fareBirr': '$fare_birr',
+                'available_seats': '$available_seats',
+                'total_seats': '$total_seats',
+                'booked_seats': '$booked_seats',
+                'fare_birr': '$fare_birr',
                 'status': 1,
                 'amenities': 1,
-                'boardingPoints': '$boarding_points',
-                'droppingPoints': '$dropping_points',
+                'boarding_points': '$boarding_points',
+                'dropping_points': '$dropping_points',
                 'driver_name': 1,
+                'driver_id': 1,
                 
                 # City fields - use schedule's own fields first, fallback to route
-                'departure_city': {'$ifNull': ['$origin_city', '$route_info.originCity']},
-                'arrival_city': {'$ifNull': ['$destination_city', '$route_info.destinationCity']},
-                'originCity': {'$ifNull': ['$origin_city', '$route_info.originCity']},
-                'destinationCity': {'$ifNull': ['$destination_city', '$route_info.destinationCity']},
+                'origin_city': {'$ifNull': ['$origin_city', '$route_info.origin_city']},
+                'destination_city': {'$ifNull': ['$destination_city', '$route_info.destination_city']},
                 
                 # Route information
-                'distanceKm': '$route_info.distanceKm',
-                'estimatedDurationHours': '$route_info.estimatedDurationHours',
+                'distance_km': '$route_info.distance_km',
+                'estimated_duration_hours': '$route_info.estimated_duration_hours',
                 'stops': '$route_info.stops',
                 
                 # Bus information
                 'bus_name': '$bus_info.bus_name',
-                'bus_number': '$bus_info.bus_number',
                 'bus_status': '$bus_info.status',
-                'bus_isActive': '$bus_info.isActive',
                 'bus_capacity': '$bus_info.capacity',
                 'bus_amenities': '$bus_info.amenities'
             }
@@ -478,27 +503,43 @@ def get_schedules():
             schedules = filtered_schedules
             print(f"✅ After filtering: {len(schedules)} schedules")
         
-        # Format schedules for response
+        # Format schedules for response and calculate available seats
         formatted_schedules = []
         for schedule in schedules:
             try:
-                # Ensure fare field exists
-                if 'fareBirr' in schedule:
-                    schedule['price'] = schedule['fareBirr']
+                # Calculate available seats from bookings
+                schedule_id = schedule.get('_id')
+                total_seats = schedule.get('total_seats', 45)
+                
+                # Count confirmed bookings for this schedule
+                booked_count = mongo.db.bookings.count_documents({
+                    'schedule_id': schedule_id,
+                    'status': {'$in': ['confirmed', 'checked_in']}
+                })
+                
+                available_seats = total_seats - booked_count
+                
+                # Skip schedules with no available seats
+                if available_seats <= 0:
+                    print(f"   ⏭️ Skipping full schedule {schedule_id}")
+                    continue
+                
+                # Update schedule with calculated values
+                schedule['booked_seats'] = booked_count
+                schedule['available_seats'] = available_seats
                 
                 # Convert datetime to string if present
-                if 'departureDate' in schedule and isinstance(schedule['departureDate'], datetime):
-                    schedule['departureDate'] = schedule['departureDate'].strftime('%Y-%m-%d')
+                if 'departure_date' in schedule and isinstance(schedule['departure_date'], datetime):
+                    schedule['departure_date'] = schedule['departure_date'].strftime('%Y-%m-%d')
                 
                 # Add bus information
                 bus_data = {
-                    '_id': schedule.get('busId'),
-                    'number': schedule.get('bus_number', schedule.get('busNumber', '')),
+                    '_id': schedule.get('bus_id'),
+                    'number': schedule.get('bus_number', ''),
                     'name': schedule.get('bus_name', ''),
-                    'type': schedule.get('busType', 'standard'),
+                    'type': schedule.get('bus_type', 'standard'),
                     'capacity': schedule.get('bus_capacity', 45),
                     'status': schedule.get('bus_status', 'active'),
-                    'isActive': schedule.get('bus_isActive', True),
                     'amenities': schedule.get('bus_amenities', [])
                 }
                 
@@ -507,7 +548,7 @@ def get_schedules():
                 # Add status flags for frontend
                 schedule['is_completed'] = is_schedule_completed(schedule)
                 schedule['is_under_maintenance'] = is_bus_under_maintenance(schedule, bus_data)
-                schedule['is_available'] = not schedule['is_completed'] and not schedule['is_under_maintenance']
+                schedule['is_available'] = not schedule['is_completed'] and not schedule['is_under_maintenance'] and available_seats > 0
                 
                 formatted_schedules.append(schedule)
             except Exception as e:
@@ -519,8 +560,8 @@ def get_schedules():
             "schedules": formatted_schedules,
             "total": len(formatted_schedules),
             "search": {
-                "originCity": origin_city,
-                "destinationCity": destination_city,
+                "origin_city": origin_city,
+                "destination_city": destination_city,
                 "date": travel_date
             },
             "filters": {
@@ -579,7 +620,7 @@ def validate_schedule(schedule_id):
                 "valid": False,
                 "error": "Schedule has already departed",
                 "reason": "completed",
-                "departure_date": schedule.get('departureDate'),
+                "departure_date": schedule.get('departure_date'),
                 "departure_time": schedule.get('departureTime')
             })
             return add_cors_headers(response)
@@ -610,10 +651,10 @@ def validate_schedule(schedule_id):
             "success": True,
             "valid": True,
             "schedule_id": str(schedule['_id']),
-            "departure_city": route.get('originCity') if route else 'Unknown',
-            "arrival_city": route.get('destinationCity') if route else 'Unknown',
-            "departure_date": schedule.get('departureDate'),
-            "departure_time": schedule.get('departureTime'),
+            "departure_city": route.get('origin_city') if route else 'Unknown',
+            "arrival_city": route.get('destination_city') if route else 'Unknown',
+            "departure_date": schedule.get('departure_date'),
+            "departure_time": schedule.get('departure_time'),
             "bus_status": 'active',
             "schedule_status": 'active'
         })
@@ -654,8 +695,8 @@ def get_schedule_by_id(schedule_id):
         
         # Convert for JSON
         schedule['_id'] = str(schedule['_id'])
-        if 'departureDate' in schedule and isinstance(schedule['departureDate'], datetime):
-            schedule['departureDate'] = schedule['departureDate'].strftime('%Y-%m-%d')
+        if 'departure_date' in schedule and isinstance(schedule['departure_date'], datetime):
+            schedule['departure_date'] = schedule['departure_date'].strftime('%Y-%m-%d')
         
         # Add bus information
         if bus_data:
@@ -726,7 +767,7 @@ def test_schedules():
                 "_id": str(schedule['_id']) if schedule else None,
                 "routeId": schedule.get('routeId') if schedule else None,
                 "busNumber": schedule.get('busNumber') if schedule else None,
-                "departureDate": schedule.get('departureDate').strftime('%Y-%m-%d') if schedule and schedule.get('departureDate') else None,
+                "departure_date": schedule.get('departure_date').strftime('%Y-%m-%d') if schedule and schedule.get('departure_date') else None,
                 "is_completed": is_schedule_completed(schedule) if schedule else None,
                 "is_under_maintenance": is_bus_under_maintenance(schedule, bus_data) if schedule else None
             },
@@ -806,7 +847,7 @@ def debug_schedules():
                 'id': str(schedule['_id']),
                 'origin': schedule.get('originCity'),
                 'destination': schedule.get('destinationCity'),
-                'date': schedule.get('departureDate'),
+                'date': schedule.get('departure_date'),
                 'time': schedule.get('departureTime'),
                 'seats': schedule.get('availableSeats'),
                 'price': schedule.get('fareBirr'),

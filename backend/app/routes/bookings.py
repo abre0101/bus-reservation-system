@@ -45,7 +45,7 @@ def is_schedule_completed(schedule):
         now = datetime.utcnow()
         
         # Get departure date and time
-        departure_date = schedule.get('departureDate')
+        departure_date = schedule.get('departure_date')
         departure_time = schedule.get('departureTime') or schedule.get('departure_time', '00:00')
         
         if not departure_date:
@@ -328,7 +328,7 @@ def validate_schedule(schedule_id):
                 'valid': False,
                 'error': 'Schedule has already departed',
                 'reason': 'completed',
-                'departure_date': schedule.get('departureDate'),
+                'departure_date': schedule.get('departure_date'),
                 'departure_time': schedule.get('departureTime')
             }), 400
         
@@ -359,7 +359,7 @@ def validate_schedule(schedule_id):
             'schedule_id': str(schedule['_id']),
             'departure_city': route.get('originCity') if route else 'Unknown',
             'arrival_city': route.get('destinationCity') if route else 'Unknown',
-            'departure_date': schedule.get('departureDate'),
+            'departure_date': schedule.get('departure_date'),
             'departure_time': schedule.get('departureTime'),
             'bus_status': 'active',
             'schedule_status': 'active'
@@ -465,7 +465,7 @@ def create_booking():
                        schedule.get('arrival_city') or 'Unknown Arrival')
         
         # Get travel date - support both formats
-        travel_date_obj = schedule.get('departure_date') or schedule.get('departureDate')
+        travel_date_obj = schedule.get('departure_date') or schedule.get('departure_date')
         if isinstance(travel_date_obj, datetime):
             travel_date = travel_date_obj.strftime('%Y-%m-%d')
         else:
@@ -475,8 +475,8 @@ def create_booking():
         arrival_time = schedule.get('arrival_time') or schedule.get('arrivalTime', '')
         
         # FIXED: Set proper status values
-        booking_status = 'pending'  # Booking status 
-        payment_status = 'paid'     # Payment status 
+        booking_status = 'confirmed'  # Booking status - confirmed when paid
+        payment_status = 'paid'       # Payment status 
         
         print(f"🎯 STATUS SETTINGS: booking='{booking_status}', payment='{payment_status}'")
         
@@ -507,7 +507,7 @@ def create_booking():
             'seat_numbers': requested_seats,
             'status': booking_status,  # This is now 'pending'
             'baggage_tag': baggage_tag,
-            'payment_method': data.get('payment_method', 'cash'),
+            'payment_method': data.get('payment_method', 'telebirr'),
             'payment_status': payment_status,  # This is 'paid'
             
             # Bus Information - support both field names
@@ -517,6 +517,9 @@ def create_booking():
             'plate_number': schedule.get('plate_number', ''),
             'bus_name': bus.get('name') if bus else '',
             'bus_status': bus.get('status') if bus else 'active',
+            
+            # NEW: Mark as online booking (customer portal)
+            'booking_source': 'online',  # online = customer portal, counter = ticketer
             
             # Timestamps
             'created_at': current_time,
@@ -529,7 +532,27 @@ def create_booking():
         result = db.bookings.insert_one(booking)
         booking_id = str(result.inserted_id)
         
-        print(f"✅ Booking created successfully. ID: {booking_id}, Status: {booking_status}")
+        # Update schedule booked seats count
+        num_seats = len(requested_seats)
+        schedule_id_obj = ObjectId(data['schedule_id'])
+        print(f"🔄 Updating schedule {schedule_id_obj} with {num_seats} seats...")
+        
+        update_result = db.busschedules.update_one(
+            {'_id': schedule_id_obj},
+            {
+                '$inc': {
+                    'booked_seats': num_seats,
+                    'available_seats': -num_seats
+                }
+            }
+        )
+        
+        if update_result.modified_count > 0:
+            print(f"✅ Schedule updated successfully! Modified: {update_result.modified_count}")
+        else:
+            print(f"⚠️  Schedule NOT updated! Matched: {update_result.matched_count}, Modified: {update_result.modified_count}")
+        
+        print(f"✅ Booking created successfully. ID: {booking_id}, Status: {booking_status}, Seats: {num_seats}")
         
         return jsonify({
             'message': 'Booking created successfully',
@@ -628,7 +651,7 @@ def search_schedules():
         schedules_cursor = db.busschedules.find({
             '$or': [
                 {'route_id': str(route['_id']), 'departure_date': date},
-                {'routeId': route['_id'], 'departureDate': date}
+                {'routeId': route['_id'], 'departure_date': date}
             ]
         })
         
@@ -667,7 +690,7 @@ def search_schedules():
             normalized['arrivalCity'] = normalized['destination_city']
             normalized['busType'] = normalized['bus_type']
             normalized['busNumber'] = normalized['bus_number']
-            normalized['departureDate'] = normalized['departure_date']
+            normalized['departure_date'] = normalized['departure_date']
             normalized['departureTime'] = normalized['departure_time']
             normalized['arrivalTime'] = normalized['arrival_time']
             normalized['availableSeats'] = normalized['available_seats']
@@ -798,7 +821,7 @@ def get_booking_by_pnr(pnr_number):
             'base_fare': booking.get('base_fare', 0),
             'status': booking.get('status', 'pending'),
             'payment_status': booking.get('payment_status', 'paid'),
-            'payment_method': booking.get('payment_method', 'cash'),
+            'payment_method': booking.get('payment_method', 'telebirr'),
             'has_baggage': booking.get('has_baggage', False),
             'baggage_weight': booking.get('baggage_weight', 0),
             'baggage_fee': booking.get('baggage_fee', 0),
@@ -825,6 +848,8 @@ def get_booking_by_pnr(pnr_number):
 def get_booking(booking_id):
     """Get a specific booking by ID"""
     try:
+        from app.utils.travel_calculator import calculate_estimated_arrival, format_duration
+        
         db = get_db()
         current_user = get_jwt_identity()
         
@@ -845,6 +870,68 @@ def get_booking(booking_id):
             if not user or user.get('role') != 'admin':
                 return jsonify({'error': 'Access denied'}), 403
         
+        # Get route information and tracking data for distance calculation
+        route_info = None
+        distance_km = None
+        tracking_info = None
+        progress_percentage = 0
+        schedule_id = booking.get('schedule_id')
+        
+        if schedule_id:
+            try:
+                schedule = db.busschedules.find_one({'_id': ObjectId(schedule_id)})
+                if schedule:
+                    # Get route information
+                    route_id = schedule.get('routeId')
+                    if route_id:
+                        route = db.routes.find_one({'_id': ObjectId(route_id)})
+                        if route:
+                            distance_km = route.get('distance_km')
+                            route_info = {
+                                'distance_km': distance_km,
+                                'route_name': route.get('name'),
+                                'estimated_duration_hours': route.get('estimated_duration_hours')
+                            }
+                    
+                    # Get tracking information
+                    checked_stops = schedule.get('checked_stops', [])
+                    total_stops = db.busstops.count_documents({'route_id': route_id}) if route_id else 0
+                    
+                    if total_stops > 0:
+                        progress_percentage = (len(checked_stops) / total_stops) * 100
+                    
+                    # Get latest location check-in
+                    latest_location = db.bus_locations.find_one(
+                        {'schedule_id': str(schedule_id), 'location_type': 'bus_stop'},
+                        sort=[('timestamp', -1)]
+                    )
+                    
+                    tracking_info = {
+                        'status': schedule.get('status', 'scheduled'),
+                        'current_location': schedule.get('current_location', 'Not started'),
+                        'progress_percentage': round(progress_percentage, 2),
+                        'checked_stops_count': len(checked_stops),
+                        'total_stops': total_stops,
+                        'is_started': len(checked_stops) > 0,
+                        'is_completed': progress_percentage >= 100,
+                        'latest_checkin': {
+                            'stop_name': latest_location.get('bus_stop_name'),
+                            'timestamp': latest_location.get('timestamp').isoformat() if latest_location and latest_location.get('timestamp') else None
+                        } if latest_location else None
+                    }
+            except Exception as e:
+                print(f"⚠️ Could not fetch route/tracking info: {e}")
+        
+        # Calculate estimated arrival if we have departure time and distance
+        # Use dynamic calculation if journey has started
+        estimated_arrival_info = None
+        if booking.get('departure_time') and distance_km:
+            estimated_arrival_info = calculate_estimated_arrival(
+                booking.get('departure_time'),
+                distance_km,
+                progress_percentage=progress_percentage
+            )
+        
         # Format response
         formatted_booking = {
             '_id': str(booking['_id']),
@@ -864,7 +951,7 @@ def get_booking(booking_id):
             'base_fare': booking.get('base_fare', 0),
             'status': booking.get('status', 'pending'),
             'payment_status': booking.get('payment_status', 'paid'),
-            'payment_method': booking.get('payment_method', 'cash'),
+            'payment_method': booking.get('payment_method', 'telebirr'),
             'has_baggage': booking.get('has_baggage', False),
             'baggage_weight': booking.get('baggage_weight', 0),
             'baggage_fee': booking.get('baggage_fee', 0),
@@ -874,6 +961,27 @@ def get_booking(booking_id):
             'bus_name': booking.get('bus_name', ''),
             'bus_company': booking.get('bus_company', '')
         }
+        
+        # Add route, tracking, and estimated arrival information
+        if route_info:
+            formatted_booking['route_info'] = route_info
+        
+        if tracking_info:
+            formatted_booking['tracking'] = tracking_info
+        
+        if estimated_arrival_info:
+            formatted_booking['estimated_arrival'] = estimated_arrival_info
+            # Also add formatted duration for easy display
+            formatted_booking['formatted_duration'] = format_duration(
+                estimated_arrival_info['travel_duration_hours'],
+                estimated_arrival_info['travel_duration_minutes']
+            )
+            # Add formatted remaining time if journey started
+            if estimated_arrival_info.get('remaining_hours') is not None:
+                formatted_booking['formatted_remaining_time'] = format_duration(
+                    estimated_arrival_info['remaining_hours'],
+                    estimated_arrival_info['remaining_minutes']
+                )
         
         if 'created_at' in booking and isinstance(booking['created_at'], datetime):
             formatted_booking['created_at'] = booking['created_at'].isoformat()
@@ -925,7 +1033,7 @@ def request_cancellation(booking_id):
                 departure_datetime = datetime.strptime(f"{travel_date} {departure_time}", "%Y-%m-%d %H:%M")
                 time_until_departure = departure_datetime - current_time
                 
-                if time_until_departure.total_seconds() < (2 * 24 * 3600):  # Less than 2 days
+                if time_until_departure.total_seconds() < (1 * 24 * 3600):  # Less than 2 days
                     return jsonify({
                         'error': 'Cancellation requests must be made at least 2 days before departure',
                         'departure_date': travel_date,
@@ -1028,6 +1136,21 @@ def cancel_booking(booking_id):
         
         if result.modified_count == 0:
             return jsonify({'error': 'Failed to cancel booking'}), 400
+        
+        # Update schedule seat counts - restore the cancelled seats
+        num_seats = len(booking.get('seat_numbers', []))
+        schedule_id = booking.get('schedule_id')
+        if schedule_id and num_seats > 0:
+            db.busschedules.update_one(
+                {'_id': ObjectId(schedule_id)},
+                {
+                    '$inc': {
+                        'booked_seats': -num_seats,
+                        'available_seats': num_seats
+                    }
+                }
+            )
+            print(f"🪑 Restored {num_seats} seats to schedule")
         
         print(f"✅ Booking cancelled: {booking.get('pnr_number')}")
         print(f"   - Refund Amount: ETB {refund_amount}")
@@ -1137,6 +1260,12 @@ def get_cancellation_requests():
                     'payment_method': booking.get('payment_method', ''),
                     'cancellation_reason': booking.get('cancellation_reason', ''),
                     'cancellation_request_date': booking.get('cancellation_request_date').isoformat() if booking.get('cancellation_request_date') else None,
+                    'cancellation_status': booking.get('cancellation_status', 'pending'),
+                    'cancellation_approved_at': booking.get('cancellation_approved_at').isoformat() if booking.get('cancellation_approved_at') else None,
+                    'cancellation_rejected_at': booking.get('cancellation_rejected_at').isoformat() if booking.get('cancellation_rejected_at') else None,
+                    'rejection_reason': booking.get('cancellation_rejection_reason', ''),
+                    'refund_amount': booking.get('refund_amount', 0),
+                    'refund_method': booking.get('refund_method', ''),
                     'days_until_departure': round(days_until_departure, 1) if days_until_departure else None,
                     'status': booking.get('status', 'pending')
                 }
@@ -1232,7 +1361,7 @@ def debug_schedule(schedule_id):
         route_fields = {}
         
         if schedule:
-            for key in ['departureDate', 'departureTime', 'arrivalTime', 'busType', 'busNumber']:
+            for key in ['departure_date', 'departureTime', 'arrivalTime', 'busType', 'busNumber']:
                 schedule_fields[key] = schedule.get(key)
                 
         if route:

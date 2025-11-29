@@ -42,18 +42,18 @@ def get_popular_routes():
         formatted_routes = []
         
         for route in routes:
-            base_fare = route.get('baseFareBirr', 200)
+            base_fare = route.get('base_fare_birr', 200)
             formatted_routes.append({
                 'route_id': str(route.get('_id', '')),
-                'departure_city': route.get('originCity', 'Unknown'),
-                'destination_city': route.get('destinationCity', 'Unknown'),
+                'departure_city': route.get('origin_city', 'Unknown'),
+                'destination_city': route.get('destination_city', 'Unknown'),
                 'min_price': base_fare,
                 'max_price': base_fare + 100,
-                'duration': f"{route.get('estimatedDurationHours', 5)} hours",
-                'distance_km': route.get('distanceKm', 0),
+                'duration': f"{route.get('estimated_duration_hours', 5)} hours",
+                'distance_km': route.get('distance_km', 0),
                 'trips_count': get_trips_count_for_route(str(route.get('_id'))),
                 'popular': True,
-                'image_url': get_route_image(route.get('originCity'), route.get('destinationCity'))
+                'image_url': get_route_image(route.get('origin_city'), route.get('destination_city'))
             })
         
         # Update cache
@@ -77,7 +77,7 @@ def get_trips_count_for_route(route_id):
         count = db.busschedules.count_documents({
             'routeId': route_id,
             'status': 'scheduled',
-            'departureDate': {'$gte': datetime.utcnow()}
+            'departure_date': {'$gte': datetime.utcnow()}
         })
         return max(count, 4)  # Minimum 4 trips for display
     except:

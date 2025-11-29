@@ -1,4 +1,6 @@
 {
     "python-envs.pythonProjects": [],
-    "python-envs.defaultEnvManager": "ms-python.python:system"
+    "python-envs.defaultEnvManager": "ms-python.python:system",
+    "codium.codeCompletion.enable": false,
+    "javascript.autoClosingTags": false
 }

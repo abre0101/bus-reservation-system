@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from app import mongo
 from datetime import datetime, timedelta
 import random
@@ -57,35 +58,56 @@ def validate_booking_data(data):
 # ==================== DASHBOARD ENDPOINTS ====================
 
 @ticketer_bp.route('/dashboard/stats', methods=['GET'])
+@jwt_required()
 def get_ticketer_dashboard_stats():
     try:
+        # Get current ticketer from JWT
+        current_user_id = get_jwt_identity()
+        
         today = datetime.now().date()
         today_str = today.isoformat()
+        today_datetime = datetime.combine(today, datetime.min.time())
+        tomorrow_datetime = today_datetime + timedelta(days=1)
         
-        # Pending check-ins (confirmed bookings for today that haven't been checked in)
+        print(f"📊 Ticketer dashboard stats for {today_str} - Ticketer ID: {current_user_id}")
+        
+        # Pending check-ins (confirmed bookings for today created by THIS ticketer)
         pending_checkins = mongo.db.bookings.count_documents({
             'travel_date': today_str,
-            'status': 'confirmed'
+            'status': 'confirmed',
+            'created_by': current_user_id  # Filter by ticketer
         })
+        
+        print(f"⏳ Pending check-ins (by this ticketer): {pending_checkins}")
 
-        # Today's revenue from completed payments
-        today_payments = list(mongo.db.payments.find({
-            'created_at': {'$gte': datetime.combine(today, datetime.min.time())},
-            'status': 'success'
+        # Today's revenue - from bookings CREATED today by THIS ticketer
+        today_bookings_list = list(mongo.db.bookings.find({
+            'created_at': {'$gte': today_datetime, '$lt': tomorrow_datetime},
+            'created_by': current_user_id  # Filter by ticketer
         }))
-        today_revenue = sum(payment.get('amount', 0) for payment in today_payments)
+        
+        # Calculate revenue (full amount for non-cancelled, cancellation fee for cancelled)
+        today_revenue = 0
+        for booking in today_bookings_list:
+            if booking.get('status') == 'cancelled':
+                today_revenue += booking.get('cancellation_fee', 0)
+            else:
+                today_revenue += booking.get('total_amount', 0)
+        
+        print(f"💰 Today's revenue (by this ticketer): ETB {today_revenue}")
 
-        # Today's bookings count
-        today_bookings = mongo.db.bookings.count_documents({
-            'travel_date': today_str,
-            'status': {'$in': ['confirmed', 'checked_in', 'completed']}
-        })
+        # Today's bookings count - bookings CREATED today by THIS ticketer
+        today_bookings = len([b for b in today_bookings_list if b.get('status') != 'cancelled'])
+        
+        print(f"🎫 Today's bookings (by this ticketer): {today_bookings}")
 
-        # Active schedules for today (scheduled + boarding + departed + active)
+        # Active schedules - ALL upcoming schedules (today and future) - this can remain global
         active_schedules = mongo.db.busschedules.count_documents({
-            'departure_date': today_str,
+            'departure_date': {'$gte': today_str},
             'status': {'$in': ['scheduled', 'boarding', 'departed', 'active']}
         })
+        
+        print(f"🚌 Active schedules (upcoming): {active_schedules}")
 
         return jsonify({
             'success': True,
@@ -98,6 +120,9 @@ def get_ticketer_dashboard_stats():
         }), 200
 
     except Exception as e:
+        print(f"❌ Ticketer dashboard error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # ==================== SCHEDULE MANAGEMENT ====================
@@ -110,26 +135,44 @@ def get_schedules():
         
         query = {}
         
+        # Date filtering
         if date_str:
+            # Specific date requested
             query['departure_date'] = date_str
+        else:
+            # No date specified - show all upcoming schedules (today and future)
+            from datetime import datetime
+            today = datetime.now().strftime('%Y-%m-%d')
+            query['departure_date'] = {'$gte': today}
             
+        # Status filtering
         if status and status != 'all':
             query['status'] = status
         else:
             # Default to active trips (scheduled + boarding + departed + active)
             query['status'] = {'$in': ['scheduled', 'boarding', 'departed', 'active']}
         
-        schedules = list(mongo.db.busschedules.find(query).sort('departure_time', 1))
+        print(f"🔍 Ticketer schedules query: {query}")
+        schedules = list(mongo.db.busschedules.find(query).sort([('departure_date', 1), ('departure_time', 1)]))
+        print(f"📊 Found {len(schedules)} schedules")
         
         schedules_data = []
         for schedule in schedules:
             schedule_data = serialize_doc(schedule)
             
             # Calculate actual booked seats from bookings
+            # Try both string and ObjectId formats for schedule_id
+            schedule_id_str = str(schedule['_id'])
             booked_seats_count = mongo.db.bookings.count_documents({
-                'schedule_id': str(schedule['_id']),
-                'status': {'$in': ['confirmed', 'checked_in']}
+                '$or': [
+                    {'schedule_id': schedule_id_str},
+                    {'schedule_id': schedule['_id']}
+                ],
+                'status': {'$in': ['confirmed', 'checked_in', 'pending']},
+                'payment_status': 'paid'
             })
+            
+            print(f"  📊 Schedule {schedule_id_str}: {booked_seats_count} booked seats")
             
             # Get route information
             route = None
@@ -177,6 +220,10 @@ def get_schedules():
             
             schedules_data.append(schedule_data)
         
+        print(f"✅ Returning {len(schedules_data)} schedules to ticketer")
+        if schedules_data:
+            print(f"📋 Sample schedule: {schedules_data[0].get('route_name')} on {schedules_data[0].get('departure_date')}")
+        
         return jsonify({
             'success': True,
             'schedules': schedules_data,
@@ -184,6 +231,7 @@ def get_schedules():
         }), 200
         
     except Exception as e:
+        print(f"❌ Error in ticketer get_schedules: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @ticketer_bp.route('/schedules/<string:schedule_id>/occupied-seats', methods=['GET'])
@@ -229,8 +277,12 @@ def get_routes():
 # ==================== QUICK BOOKING ====================
 
 @ticketer_bp.route('/quick-booking', methods=['POST'])
+@jwt_required()
 def create_quick_booking():
     try:
+        # Get current ticketer user ID
+        current_ticketer_id = get_jwt_identity()
+        
         data = request.get_json()
         
         # Validate booking data
@@ -290,11 +342,25 @@ def create_quick_booking():
                 baggage_fee = 150
             total_amount += baggage_fee
 
+        # Try to find user_id by phone/email if not provided
+        user_id = data.get('user_id')
+        if not user_id:
+            # Try to find existing customer by phone or email
+            user = find_user_by_contact(
+                data.get('passenger_phone'),
+                data.get('passenger_email')
+            )
+            if user:
+                user_id = user['_id']
+                print(f"✅ Linked booking to existing customer: {user.get('name')} ({user_id})")
+            else:
+                print(f"ℹ️  No existing customer found for phone/email - booking will be unlinked")
+        
         # Create booking document matching your data structure
         booking_data = {
             'pnr_number': pnr_number,
             'schedule_id': data['schedule_id'],
-            'user_id': data.get('user_id'),  # Optional for walk-in customers
+            'user_id': user_id,  # Now properly linked to customer if found
             'passenger_name': data['passenger_name'],
             'passenger_phone': data['passenger_phone'],
             'passenger_email': data.get('passenger_email'),
@@ -318,6 +384,10 @@ def create_quick_booking():
             'baggage_fee': baggage_fee,
             'bus_company': 'EthioBus',
             'checked_in': False,
+            # NEW: Track who created this booking
+            'created_by': current_ticketer_id,  # Use created_by to match dashboard stats query
+            'booked_by': current_ticketer_id,   # Keep for compatibility
+            'booking_source': 'counter',  # counter = ticketer, online = customer portal
             'created_at': datetime.now(),
             'updated_at': datetime.now()
         }
@@ -336,6 +406,9 @@ def create_quick_booking():
             'status': 'success',
             'tx_ref': f"ethiobus-{int(datetime.now().timestamp())}{random.randint(100, 999)}",
             'booking_created': True,
+            # NEW: Track who processed this payment
+            'processed_by': current_ticketer_id,
+            'booking_source': 'counter',
             'created_at': datetime.now(),
             'updated_at': datetime.now()
         }
@@ -595,6 +668,50 @@ def get_bookings_by_phone(phone):
 
 # ==================== CUSTOMER MANAGEMENT ====================
 
+def normalize_phone(phone):
+    """Normalize phone number for matching - remove country code and special characters"""
+    if not phone:
+        return None
+    # Remove +, spaces, and hyphens
+    normalized = phone.replace('+', '').replace(' ', '').replace('-', '')
+    # Remove country code 251 if present
+    if normalized.startswith('251'):
+        normalized = '0' + normalized[3:]
+    return normalized
+
+def find_user_by_contact(phone, email):
+    """Find user by phone or email, trying multiple phone formats"""
+    if not phone and not email:
+        return None
+    
+    match_conditions = []
+    
+    # Match by email
+    if email:
+        match_conditions.append({'email': email})
+    
+    # Match by phone (multiple formats)
+    if phone:
+        # Normalize to format without country code
+        normalized_phone = normalize_phone(phone)
+        if normalized_phone:
+            match_conditions.append({'phone': normalized_phone})
+        
+        # Also try original format
+        match_conditions.append({'phone': phone})
+    
+    if not match_conditions:
+        return None
+    
+    # Find user
+    user = mongo.db.users.find_one({
+        '$or': match_conditions,
+        'role': 'customer',
+        'is_active': True
+    })
+    
+    return user
+
 @ticketer_bp.route('/customers', methods=['GET'])
 def get_customers():
     try:
@@ -607,27 +724,67 @@ def get_customers():
         customers_data = []
         for customer in customers:
             customer_data = serialize_doc(customer)
+            customer_id = customer['_id']
             
-            # Get booking stats for this customer
-            booking_stats = mongo.db.bookings.aggregate([
-                {'$match': {'user_id': str(customer['_id'])}},
+            # PRIMARY: Match by user_id (this should be the main way after migration)
+            # FALLBACK: Also match by phone/email for bookings not yet migrated
+            match_conditions = [
+                {'user_id': customer_id},  # ObjectId format (PRIMARY)
+                {'user_id': str(customer_id)}  # String format (legacy)
+            ]
+            
+            # Fallback matching for unmigrated bookings
+            customer_phone = customer.get('phone')
+            customer_email = customer.get('email')
+            
+            if customer_phone:
+                match_conditions.append({'passenger_phone': customer_phone})
+                # Also try with country code format
+                if customer_phone.startswith('0'):
+                    phone_with_code = '+251' + customer_phone[1:]
+                    match_conditions.append({'passenger_phone': phone_with_code})
+            
+            if customer_email:
+                match_conditions.append({'passenger_email': customer_email})
+            
+            match_query = {'$or': match_conditions}
+            
+            # Get all bookings for counting
+            all_bookings_stats = mongo.db.bookings.aggregate([
+                {'$match': match_query},
                 {'$group': {
                     '_id': None,
                     'total_bookings': {'$sum': 1},
-                    'total_spent': {'$sum': '$total_amount'},
                     'last_booking': {'$max': '$created_at'}
                 }}
             ])
             
-            stats = list(booking_stats)
-            if stats:
-                customer_data['booking_count'] = stats[0]['total_bookings']
-                customer_data['total_spent'] = stats[0]['total_spent']
-                customer_data['last_booking'] = stats[0]['last_booking']
+            # Get non-cancelled bookings for spending calculation
+            spending_stats = mongo.db.bookings.aggregate([
+                {'$match': {
+                    **match_query,
+                    'status': {'$ne': 'cancelled'}  # Exclude cancelled bookings from spending
+                }},
+                {'$group': {
+                    '_id': None,
+                    'total_spent': {'$sum': '$total_amount'}
+                }}
+            ])
+            
+            all_stats = list(all_bookings_stats)
+            spend_stats = list(spending_stats)
+            
+            if all_stats:
+                customer_data['booking_count'] = all_stats[0]['total_bookings']
+                customer_data['last_booking'] = all_stats[0]['last_booking']
             else:
                 customer_data['booking_count'] = 0
-                customer_data['total_spent'] = 0
                 customer_data['last_booking'] = None
+            
+            if spend_stats:
+                customer_data['total_spent'] = spend_stats[0]['total_spent']
+            else:
+                customer_data['total_spent'] = 0
             
             customers_data.append(customer_data)
 
@@ -637,29 +794,51 @@ def get_customers():
         }), 200
 
     except Exception as e:
+        print(f"❌ Error in get_customers: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @ticketer_bp.route('/customer/<string:customer_id>/bookings', methods=['GET'])
 @ticketer_bp.route('/customer/id/<string:customer_id>/bookings', methods=['GET'])
 def get_customer_bookings(customer_id):
     try:
-        # Handle both user_id and passenger_phone lookups
+        # Get customer info
+        customer = None
         try:
-            # Try as user_id first (ObjectId format)
-            if len(customer_id) == 24:
-                bookings = list(mongo.db.bookings.find({
-                    'user_id': customer_id
-                }).sort('created_at', -1).limit(50))
-            else:
-                # Fallback to passenger_phone
-                bookings = list(mongo.db.bookings.find({
-                    'passenger_phone': customer_id
-                }).sort('created_at', -1).limit(50))
+            customer = mongo.db.users.find_one({'_id': ObjectId(customer_id)})
         except:
-            # Fallback to passenger_phone
-            bookings = list(mongo.db.bookings.find({
-                'passenger_phone': customer_id
-            }).sort('created_at', -1).limit(50))
+            pass
+        
+        # PRIMARY: Match by user_id
+        match_conditions = []
+        
+        try:
+            if len(customer_id) == 24:
+                match_conditions.append({'user_id': ObjectId(customer_id)})
+                match_conditions.append({'user_id': customer_id})  # String format (legacy)
+        except:
+            pass
+        
+        # FALLBACK: Match by phone/email for unmigrated bookings
+        if customer:
+            customer_phone = customer.get('phone')
+            customer_email = customer.get('email')
+            
+            if customer_phone:
+                match_conditions.append({'passenger_phone': customer_phone})
+                # Also try with country code
+                if customer_phone.startswith('0'):
+                    phone_with_code = '+251' + customer_phone[1:]
+                    match_conditions.append({'passenger_phone': phone_with_code})
+            
+            if customer_email:
+                match_conditions.append({'passenger_email': customer_email})
+        
+        match_query = {'$or': match_conditions} if match_conditions else {}
+        
+        # Fetch bookings
+        bookings = list(mongo.db.bookings.find(match_query).sort('created_at', -1).limit(50))
         
         bookings_data = []
         for booking in bookings:
@@ -682,31 +861,28 @@ def get_customer_bookings(customer_id):
 
 # ==================== POINT OF SALE ====================
 
+
+
 @ticketer_bp.route('/pos/cash-drawer', methods=['GET'])
 def get_cash_drawer():
     try:
         today = datetime.now().date()
         
-        # Get today's cash payments
-        cash_payments = list(mongo.db.payments.find({
-            'created_at': {'$gte': datetime.combine(today, datetime.min.time())},
-            'payment_method': 'cash',
-            'status': 'success'
-        }))
-        
-        cash_sales = sum(payment.get('amount', 0) for payment in cash_payments)
-
-        # Get or create cash drawer record
+        # Get or create cash drawer record for today
         cash_drawer = mongo.db.cash_drawers.find_one({
             'date': today.isoformat()
         })
         
         if not cash_drawer:
+            # No drawer exists - create a closed one
             cash_drawer = {
                 'date': today.isoformat(),
                 'opening_balance': 0,
-                'current_balance': cash_sales,
-                'total_cash': cash_sales,
+                'current_balance': 0,
+                'total_sales': 0,
+                'total_cash': 0,
+                'total_chapa': 0,
+                'tickets_sold': 0,
                 'status': 'closed',
                 'created_at': datetime.now(),
                 'updated_at': datetime.now()
@@ -714,21 +890,60 @@ def get_cash_drawer():
             result = mongo.db.cash_drawers.insert_one(cash_drawer)
             cash_drawer['_id'] = result.inserted_id
         else:
-            # Update current balance but preserve status
-            current_balance = cash_drawer.get('opening_balance', 0) + cash_sales
-            mongo.db.cash_drawers.update_one(
-                {'_id': cash_drawer['_id']},
-                {
-                    '$set': {
-                        'current_balance': current_balance,
-                        'total_cash': cash_sales,
-                        'updated_at': datetime.now()
-                    }
+            # Drawer exists - calculate current session sales if open
+            if cash_drawer.get('status') == 'open':
+                from flask_jwt_extended import get_jwt_identity
+                
+                opened_at = cash_drawer.get('opened_at', datetime.combine(today, datetime.min.time()))
+                
+                # Get current ticketer user ID
+                try:
+                    current_ticketer_id = get_jwt_identity()
+                except:
+                    current_ticketer_id = None
+                
+                # Build query for ticketer's counter sales only
+                session_query = {
+                    'created_at': {'$gte': opened_at},
+                    'status': 'success',
+                    'booking_source': 'counter'  # NEW: Only counter sales
                 }
-            )
-            cash_drawer['current_balance'] = current_balance
-            cash_drawer['total_cash'] = cash_sales
-            # Preserve the existing status from database
+                
+                # NEW: Filter by current ticketer if available
+                if current_ticketer_id:
+                    session_query['processed_by'] = current_ticketer_id
+                
+                # Get all payments made during this drawer session by this ticketer
+                session_payments = list(mongo.db.payments.find(session_query))
+                
+                # Calculate totals
+                total_sales = sum(p.get('amount', 0) for p in session_payments)
+                total_cash = sum(p.get('amount', 0) for p in session_payments if p.get('payment_method') == 'cash')
+                total_chapa = sum(p.get('amount', 0) for p in session_payments if p.get('payment_method') == 'chapa')
+                tickets_sold = len(session_payments)
+                
+                current_balance = cash_drawer.get('opening_balance', 0) + total_cash
+                
+                # Update drawer with current session data
+                mongo.db.cash_drawers.update_one(
+                    {'_id': cash_drawer['_id']},
+                    {
+                        '$set': {
+                            'current_balance': current_balance,
+                            'total_sales': total_sales,
+                            'total_cash': total_cash,
+                            'total_chapa': total_chapa,
+                            'tickets_sold': tickets_sold,
+                            'updated_at': datetime.now()
+                        }
+                    }
+                )
+                
+                cash_drawer['current_balance'] = current_balance
+                cash_drawer['total_sales'] = total_sales
+                cash_drawer['total_cash'] = total_cash
+                cash_drawer['total_chapa'] = total_chapa
+                cash_drawer['tickets_sold'] = tickets_sold
 
         cash_drawer_data = serialize_doc(cash_drawer)
 
@@ -743,17 +958,33 @@ def get_cash_drawer():
 @ticketer_bp.route('/pos/sales-stats', methods=['GET'])
 def get_sales_stats():
     try:
+        from flask_jwt_extended import get_jwt_identity
+        
         date_str = request.args.get('date', datetime.now().date().isoformat())
         target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
         
-        # Get payments for the target date
-        payments = list(mongo.db.payments.find({
+        # Get current ticketer user ID
+        try:
+            current_ticketer_id = get_jwt_identity()
+        except:
+            current_ticketer_id = None
+        
+        # Build query for ticketer's counter sales only
+        query = {
             'created_at': {
                 '$gte': datetime.combine(target_date, datetime.min.time()),
                 '$lt': datetime.combine(target_date, datetime.min.time()) + timedelta(days=1)
             },
-            'status': 'success'
-        }))
+            'status': 'success',
+            'booking_source': 'counter'  # NEW: Only counter sales
+        }
+        
+        # NEW: Filter by current ticketer if available
+        if current_ticketer_id:
+            query['processed_by'] = current_ticketer_id
+        
+        # Get payments for the target date
+        payments = list(mongo.db.payments.find(query))
 
         total_sales = sum(payment.get('amount', 0) for payment in payments)
         transaction_count = len(payments)
@@ -784,22 +1015,32 @@ def get_sales_stats():
 # ==================== BOOKING MANAGEMENT ====================
 
 @ticketer_bp.route('/bookings', methods=['GET'])
+@jwt_required()
 def get_bookings():
     try:
+        # Get current ticketer from JWT
+        current_user_id = get_jwt_identity()
+        
         status = request.args.get('status', 'all')
         date_str = request.args.get('date')
         page = int(request.args.get('page', 1))
         limit = int(request.args.get('limit', 20))
         skip = (page - 1) * limit
         
-        query = {}
+        # Filter by ticketer who created the booking
+        query = {'created_by': current_user_id}
+        
         if status != 'all':
             query['status'] = status
         if date_str:
             query['travel_date'] = date_str
+        
+        print(f"📋 Fetching bookings for ticketer {current_user_id} with query: {query}")
             
         bookings = list(mongo.db.bookings.find(query).sort('created_at', -1).skip(skip).limit(limit))
         total = mongo.db.bookings.count_documents(query)
+        
+        print(f"📊 Found {total} bookings for this ticketer")
         
         bookings_data = []
         for booking in bookings:
@@ -1051,22 +1292,24 @@ def open_cash_drawer():
         
         # Check if drawer already open
         existing = mongo.db.cash_drawers.find_one({
-            'date': today.isoformat(),
-            'status': 'open'
+            'date': today.isoformat()
         })
         
-        if existing:
+        if existing and existing.get('status') == 'open':
             return jsonify({
                 'success': False,
                 'error': 'Cash drawer already open for today'
             }), 400
         
-        # Create new cash drawer record
+        # Create or update cash drawer record
         cash_drawer = {
             'date': today.isoformat(),
             'opening_balance': data.get('opening_balance', 0),
             'current_balance': data.get('opening_balance', 0),
+            'total_sales': 0,
             'total_cash': 0,
+            'total_chapa': 0,
+            'tickets_sold': 0,
             'status': 'open',
             'opened_at': datetime.now(),
             'opened_by': data.get('user_id', 'ticketer'),
@@ -1074,12 +1317,22 @@ def open_cash_drawer():
             'updated_at': datetime.now()
         }
         
-        result = mongo.db.cash_drawers.insert_one(cash_drawer)
-        cash_drawer['_id'] = result.inserted_id
+        if existing:
+            # Update existing drawer
+            mongo.db.cash_drawers.update_one(
+                {'_id': existing['_id']},
+                {'$set': cash_drawer}
+            )
+            cash_drawer['_id'] = existing['_id']
+        else:
+            # Create new drawer
+            result = mongo.db.cash_drawers.insert_one(cash_drawer)
+            cash_drawer['_id'] = result.inserted_id
         
         return jsonify({
             'success': True,
-            'cashDrawer': serialize_doc(cash_drawer)
+            'cashDrawer': serialize_doc(cash_drawer),
+            'message': 'Cash drawer opened successfully'
         }), 200
         
     except Exception as e:
@@ -1103,21 +1356,62 @@ def close_cash_drawer():
                 'error': 'No open cash drawer found for today'
             }), 404
         
-        # Update drawer status
+        # Calculate final session totals
+        from flask_jwt_extended import get_jwt_identity
+        
+        opened_at = cash_drawer.get('opened_at', datetime.combine(today, datetime.min.time()))
+        
+        # Get current ticketer user ID
+        try:
+            current_ticketer_id = get_jwt_identity()
+        except:
+            current_ticketer_id = None
+        
+        # Build query for ticketer's counter sales only
+        session_query = {
+            'created_at': {'$gte': opened_at},
+            'status': 'success',
+            'booking_source': 'counter'  # NEW: Only counter sales
+        }
+        
+        # NEW: Filter by current ticketer if available
+        if current_ticketer_id:
+            session_query['processed_by'] = current_ticketer_id
+        
+        session_payments = list(mongo.db.payments.find(session_query))
+        
+        total_sales = sum(p.get('amount', 0) for p in session_payments)
+        total_cash = sum(p.get('amount', 0) for p in session_payments if p.get('payment_method') == 'cash')
+        total_chapa = sum(p.get('amount', 0) for p in session_payments if p.get('payment_method') == 'chapa')
+        tickets_sold = len(session_payments)
+        
+        final_balance = cash_drawer.get('opening_balance', 0) + total_cash
+        
+        # Update drawer with final totals and close
         mongo.db.cash_drawers.update_one(
             {'_id': cash_drawer['_id']},
             {
                 '$set': {
                     'status': 'closed',
                     'closed_at': datetime.now(),
+                    'closing_balance': final_balance,
+                    'current_balance': final_balance,
+                    'total_sales': total_sales,
+                    'total_cash': total_cash,
+                    'total_chapa': total_chapa,
+                    'tickets_sold': tickets_sold,
                     'updated_at': datetime.now()
                 }
             }
         )
         
+        # Get updated drawer
+        updated_drawer = mongo.db.cash_drawers.find_one({'_id': cash_drawer['_id']})
+        
         return jsonify({
             'success': True,
-            'message': 'Cash drawer closed successfully'
+            'message': 'Cash drawer closed successfully',
+            'cashDrawer': serialize_doc(updated_drawer)
         }), 200
         
     except Exception as e:
@@ -1125,45 +1419,75 @@ def close_cash_drawer():
 
 @ticketer_bp.route('/pos/transactions', methods=['GET'])
 def get_transactions():
-    """Get POS transactions"""
+    """Get POS transactions - ONLY ticketer's counter sales"""
     try:
-        date_str = request.args.get('date', datetime.now().date().isoformat())
+        from flask_jwt_extended import get_jwt_identity
+        
+        today = datetime.now().date()
+        
+        # Get current ticketer user ID
+        try:
+            current_ticketer_id = get_jwt_identity()
+        except:
+            current_ticketer_id = None
+        
+        # Check if cash drawer is open
+        cash_drawer = mongo.db.cash_drawers.find_one({
+            'date': today.isoformat()
+        })
+        
+        if cash_drawer and cash_drawer.get('status') == 'open':
+            # Drawer is open - show only transactions from this session
+            opened_at = cash_drawer.get('opened_at', datetime.combine(today, datetime.min.time()))
+            query = {
+                'created_at': {'$gte': opened_at},
+                'status': 'success',
+                'booking_source': 'counter'  # NEW: Only counter sales
+            }
+        else:
+            # Drawer is closed - show today's counter transactions
+            query = {
+                'created_at': {
+                    '$gte': datetime.combine(today, datetime.min.time()),
+                    '$lt': datetime.combine(today, datetime.min.time()) + timedelta(days=1)
+                },
+                'status': 'success',
+                'booking_source': 'counter'  # NEW: Only counter sales
+            }
+        
+        # NEW: Filter by current ticketer if available
+        if current_ticketer_id:
+            query['processed_by'] = current_ticketer_id
+        
+        # Apply payment method filter if provided
         payment_method = request.args.get('payment_method')
-        
-        target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-        
-        query = {
-            'created_at': {
-                '$gte': datetime.combine(target_date, datetime.min.time()),
-                '$lt': datetime.combine(target_date, datetime.min.time()) + timedelta(days=1)
-            },
-            'status': 'success'
-        }
-        
-        if payment_method:
+        if payment_method and payment_method != 'all':
             query['payment_method'] = payment_method
         
+        # Get transactions
         transactions = list(mongo.db.payments.find(query).sort('created_at', -1))
         
-        # Enrich with booking/customer information
+        # Enrich transaction data with booking information
         transactions_data = []
         for transaction in transactions:
             transaction_data = serialize_doc(transaction)
             
-            # Get booking information if available
+            # Get booking details if booking_id exists
             if transaction.get('booking_id'):
                 booking = mongo.db.bookings.find_one({'_id': ObjectId(transaction['booking_id'])})
                 if booking:
-                    transaction_data['customer_name'] = booking.get('passenger_name')
-                    transaction_data['customer_phone'] = booking.get('passenger_phone')
+                    transaction_data['customer_name'] = booking.get('passenger_name', '')
+                    transaction_data['customer_phone'] = booking.get('passenger_phone', '')[:50]
             
             transactions_data.append(transaction_data)
         
         return jsonify({
             'success': True,
             'transactions': transactions_data,
-            'total': len(transactions_data)
+            'total': len(transactions_data),
+            'drawer_status': cash_drawer.get('status') if cash_drawer else 'closed'
         }), 200
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+   

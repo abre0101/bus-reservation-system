@@ -41,12 +41,12 @@ def get_driver_assignments():
                 } if driver else None,
                 'route': {
                     '_id': str(route['_id']),
-                    'name': f"{route.get('originCity')} to {route.get('destinationCity')}"
+                    'name': f"{route.get('origin_city')} to {route.get('destination_city')}"
                 } if route else None,
                 'schedule': {
                     '_id': str(schedule['_id']),
-                    'departure_time': schedule.get('departureTime'),
-                    'departure_date': schedule.get('departureDate')
+                    'departure_time': schedule.get('departure_time'),
+                    'departure_date': schedule.get('departure_date')
                 } if schedule else None,
                 'assigned_date': assignment.get('assigned_date'),
                 'status': assignment.get('status', 'active')
@@ -152,17 +152,17 @@ def get_my_assignments():
                     '_id': str(assignment['_id']),
                     'schedule': {
                         '_id': str(schedule['_id']),
-                        'departure_time': schedule.get('departureTime'),
-                        'arrival_time': schedule.get('arrivalTime'),
-                        'departure_date': schedule.get('departureDate'),
-                        'available_seats': schedule.get('availableSeats')
+                        'departure_time': schedule.get('departure_time'),
+                        'arrival_time': schedule.get('arrival_time'),
+                        'departure_date': schedule.get('departure_date'),
+                        'available_seats': schedule.get('available_seats')
                     },
                     'route': {
                         '_id': str(route['_id']),
-                        'origin': route.get('originCity'),
-                        'destination': route.get('destinationCity'),
-                        'distance': route.get('distanceKm'),
-                        'duration': route.get('estimatedDurationHours')
+                        'origin': route.get('origin_city'),
+                        'destination': route.get('destination_city'),
+                        'distance': route.get('distance_km'),
+                        'duration': route.get('estimated_duration_hours')
                     },
                     'bus': {
                         '_id': str(bus['_id']),
@@ -212,7 +212,7 @@ def get_available_drivers():
             },
             {
                 '$match': {
-                    'schedule.departureDate': {
+                    'schedule.departure_date': {
                         '$gte': target_date.replace(hour=0, minute=0, second=0, microsecond=0),
                         '$lt': target_date.replace(hour=23, minute=59, second=59, microsecond=999999)
                     },

@@ -8,9 +8,34 @@ import random
 dashboard_bp = Blueprint('dashboard', __name__)
 
 def get_user_bookings(user_id):
-    """Helper function to get user bookings using ObjectId"""
+    """Helper function to get user bookings using ObjectId OR matching phone/email"""
     try:
-        return list(mongo.db.bookings.find({'user_id': ObjectId(user_id)}))
+        # Get user info to match by phone/email
+        user = mongo.db.users.find_one({'_id': ObjectId(user_id)})
+        if not user:
+            return []
+        
+        # Build query to match either:
+        # 1. user_id matches (online bookings)
+        # 2. passenger_phone matches user's phone (counter bookings)
+        # 3. passenger_email matches user's email (counter bookings)
+        query = {
+            '$or': [
+                {'user_id': ObjectId(user_id)},
+            ]
+        }
+        
+        # Add phone matching if user has phone
+        if user.get('phone'):
+            query['$or'].append({'passenger_phone': user.get('phone')})
+        
+        # Add email matching if user has email
+        if user.get('email'):
+            query['$or'].append({'passenger_email': user.get('email')})
+        
+        bookings = list(mongo.db.bookings.find(query))
+        print(f"✅ Found {len(bookings)} bookings for user (including counter bookings)")
+        return bookings
     except Exception as e:
         print(f"❌ Error getting user bookings: {e}")
         return []
@@ -146,7 +171,7 @@ def get_popular_routes():
             schedule_count = mongo.db.busschedules.count_documents({
                 'routeId': str(route['_id']),
                 'status': 'scheduled',
-                'departureDate': {'$gte': datetime.utcnow()}
+                'departure_date': {'$gte': datetime.utcnow()}
             })
             
             # Calculate popularity score (0-100)
@@ -154,15 +179,15 @@ def get_popular_routes():
             
             route_data = {
                 '_id': str(route['_id']),
-                'originCity': route.get('originCity', 'Unknown'),
-                'destinationCity': route.get('destinationCity', 'Unknown'),
-                'distanceKm': route.get('distanceKm', 0),
-                'estimatedDurationHours': route.get('estimatedDurationHours', 0),
-                'baseFareBirr': route.get('baseFareBirr', 0),
-                'routeType': 'standard',
+                'origin_city': route.get('origin_city', 'Unknown'),
+                'destination_city': route.get('destination_city', 'Unknown'),
+                'distance_km': route.get('distance_km', 0),
+                'estimated_duration_hours': route.get('estimated_duration_hours', 0),
+                'base_fare_birr': route.get('base_fare_birr', 0),
+                'route_type': 'standard',
                 'popularity': popularity_score,
-                'scheduleCount': schedule_count,
-                'image_url': get_route_image(route.get('originCity'))
+                'schedule_count': schedule_count,
+                'image_url': get_route_image(route.get('origin_city'))
             }
             routes_data.append(route_data)
         
@@ -208,7 +233,7 @@ def today_schedule():
         schedules = list(mongo.db.busschedules.aggregate([
             {
                 '$match': {
-                    'departureDate': {
+                    'departure_date': {
                         '$gte': today_start,
                         '$lt': today_end
                     },
@@ -260,7 +285,7 @@ def today_schedule():
                     'availableSeats': 1,
                     'fareBirr': 1,
                     'status': 1,
-                    'departureDate': 1
+                    'departure_date': 1
                 }
             },
             {
@@ -272,8 +297,8 @@ def today_schedule():
         
         # Format dates for JSON serialization
         for schedule in schedules:
-            if 'departureDate' in schedule and isinstance(schedule['departureDate'], datetime):
-                schedule['departureDate'] = schedule['departureDate'].isoformat()
+            if 'departure_date' in schedule and isinstance(schedule['departure_date'], datetime):
+                schedule['departure_date'] = schedule['departure_date'].isoformat()
         
         return jsonify({
             'success': True,
@@ -328,8 +353,8 @@ def get_dashboard_stats():
                 
             try:
                 schedule = mongo.db.busschedules.find_one({'_id': ObjectId(schedule_id)})
-                if schedule and schedule.get('departureDate'):
-                    travel_date = schedule['departureDate']
+                if schedule and schedule.get('departure_date'):
+                    travel_date = schedule['departure_date']
                     
                     # Parse date if it's a string
                     if isinstance(travel_date, str):
@@ -433,20 +458,25 @@ def get_recent_bookings():
                             schedule_info = {
                                 'departure_city': route.get('originCity', ''),
                                 'arrival_city': route.get('destinationCity', ''),
-                                'travel_date': schedule.get('departureDate'),
+                                'travel_date': schedule.get('departure_date'),
                                 'departure_time': schedule.get('departureTime', ''),
                                 'bus_type': schedule.get('busType', 'Standard')
                             }
                     
                     # 🔥 FIX: Get bus information from buses collection
-                    bus_id = schedule.get('busId')
+                    bus_id = schedule.get('busId') or schedule.get('bus_id')
                     if bus_id:
-                        bus = mongo.db.buses.find_one({'_id': ObjectId(bus_id)})
+                        try:
+                            bus = mongo.db.buses.find_one({'_id': ObjectId(bus_id)})
+                        except:
+                            bus = None
+                        
                         if bus:
                             bus_info = {
-                                'bus_number': bus.get('bus_number', 'N/A'),
-                                'bus_name': bus.get('bus_name', 'N/A'),
-                                'bus_type': bus.get('bus_type', 'Standard')
+                                'bus_number': bus.get('bus_number'),
+                                'plate_number': bus.get('plate_number'),
+                                'bus_name': bus.get('bus_name'),
+                                'bus_type': bus.get('type') or bus.get('bus_type')
                             }
                             print(f"✅ Found bus info: {bus_info}")
                         else:
@@ -482,11 +512,23 @@ def get_recent_bookings():
                 'booked_at': created_at,
                 'currency': 'ETB',
                 'bus_type': bus_info.get('bus_type') or schedule_info.get('bus_type') or booking.get('bus_type', 'Standard'),
-                # 🔥 FIX: Add bus number and name
-                'bus_number': bus_info.get('bus_number', schedule.get('busNumber', 'N/A') if schedule else 'N/A'),
-                'bus_name': bus_info.get('bus_name', 'N/A'),
+                # 🔥 FIX: Add bus number and name - use None instead of 'N/A' to let frontend handle it
+                'bus_number': bus_info.get('bus_number') or (schedule.get('bus_number') if schedule else None) or (schedule.get('busNumber') if schedule else None),
+                'plate_number': bus_info.get('plate_number') or (schedule.get('plate_number') if schedule else None),
+                'bus_name': bus_info.get('bus_name') or None,
                 # 🔥 ADD: Passenger name with proper fallback
-                'passenger_name': booking.get('passenger_name') or (user.get('full_name') if user else 'Passenger')
+                'passenger_name': booking.get('passenger_name') or (user.get('full_name') if user else 'Passenger'),
+                # 🔥 ADD: Cancellation fields
+                'cancellation_requested': booking.get('cancellation_requested', False),
+                'cancellation_status': booking.get('cancellation_status'),
+                'cancellation_reason': booking.get('cancellation_reason'),
+                'cancellation_request_date': booking.get('cancellation_request_date').isoformat() if booking.get('cancellation_request_date') else None,
+                'cancellation_approved_at': booking.get('cancellation_approved_at').isoformat() if booking.get('cancellation_approved_at') else None,
+                'cancellation_rejected_at': booking.get('cancellation_rejected_at').isoformat() if booking.get('cancellation_rejected_at') else None,
+                'cancellation_rejection_reason': booking.get('cancellation_rejection_reason'),
+                'refund_amount': booking.get('refund_amount'),
+                'refund_method': booking.get('refund_method'),
+                'refund_status': booking.get('refund_status')
             }
             
             print(f"✅ Booking {booking_data['pnr_number']} - Bus: {booking_data['bus_number']} - Passenger: {booking_data['passenger_name']}")
@@ -542,7 +584,7 @@ def get_upcoming_trips():
                 continue
             
             # Check if this is an upcoming trip
-            travel_date = schedule.get('departureDate')
+            travel_date = schedule.get('departure_date')
             if not travel_date:
                 print(f"❌ No travel_date in schedule")
                 continue
@@ -670,7 +712,7 @@ def get_user_bookings_for_dashboard():
                             schedule_info = {
                                 'departure_city': route.get('originCity', ''),
                                 'arrival_city': route.get('destinationCity', ''),
-                                'travel_date': schedule.get('departureDate'),
+                                'travel_date': schedule.get('departure_date'),
                                 'departure_time': schedule.get('departureTime', ''),
                                 'bus_type': schedule.get('busType', 'Standard')
                             }

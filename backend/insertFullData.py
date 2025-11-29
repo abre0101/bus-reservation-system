@@ -13,11 +13,7 @@ def calculate_arrival_time(departure_time, duration_hours):
 
 def calculate_fare(base_fare, bus_type):
     """Calculate fare based on bus type"""
-    fare_multipliers = {
-        'standard': 1.0,
-        'premium': 1.3,
-        'luxury': 1.7
-    }
+    fare_multipliers = {'standard': 1.0, 'premium': 1.3, 'luxury': 1.7}
     return int(base_fare * fare_multipliers.get(bus_type, 1.0))
 
 def calculate_baggage_fee(weight_kg):
@@ -31,16 +27,22 @@ def calculate_baggage_fee(weight_kg):
     else:
         return 150
 
-def create_sample_data():
-    """Insert comprehensive sample data with ticketer functionality"""
+def create_full_data():
+    """
+    Insert comprehensive sample data with proper active trips logic
     
+    Active Trips Logic:
+    - Active Trips = scheduled + boarding + departed + active
+    - On Route Trips = departed + active (subset of Active Trips)
+    - Completed Trips = completed status
+    - Cancelled Trips = cancelled status
+    """
     app = create_app()
     with app.app_context():
         from app import mongo
         db = mongo.db
         
-        # Clear existing data
-        print("🗑️ Clearing existing data...")
+        print("🗑️  Clearing existing data...")
         db.users.delete_many({})
         db.buses.delete_many({})
         db.routes.delete_many({})
@@ -49,21 +51,19 @@ def create_sample_data():
         db.payments.delete_many({})
         db.driver_assignments.delete_many({})
         
-        # 1. Create Users (Admins, Operators, Drivers, Customers, Ticketers)
         print("👥 Creating users...")
         users = [
-            # Admin User
             {
                 "_id": ObjectId("507f1f77bcf86cd799439011"),
                 "email": "admin@ethiobus.com",
-                "password": "$2b$12$LQv3c1yqBWVHxkd0L8k7OeB8dZ8N5aYQGzg5YRwN5R5Y5WY5WY5W",  # password123
+                "password": "$2b$12$LQv3c1yqBWVHxkd0L8k7OeB8dZ8N5aYQGzg5YRwN5R5Y5WY5WY5W",
                 "name": "System Administrator",
                 "phone": "+251911223344",
                 "role": "admin",
                 "is_active": True,
-                "created_at": datetime.utcnow() - timedelta(days=30)
+                "created_at": datetime.utcnow() - timedelta(days=30),
+                "updated_at": datetime.utcnow()
             },
-            # Operator User
             {
                 "_id": ObjectId("507f1f77bcf86cd799439012"),
                 "email": "operator@ethiobus.com",
@@ -72,9 +72,9 @@ def create_sample_data():
                 "phone": "+251922334455",
                 "role": "operator",
                 "is_active": True,
-                "created_at": datetime.utcnow() - timedelta(days=25)
+                "created_at": datetime.utcnow() - timedelta(days=25),
+                "updated_at": datetime.utcnow()
             },
-            # Ticketer Users (Station Agents)
             {
                 "_id": ObjectId("507f1f77bcf86cd799439013"),
                 "email": "ticketer1@ethiobus.com",
@@ -84,7 +84,8 @@ def create_sample_data():
                 "role": "ticketer",
                 "station": "Addis Ababa Main Station",
                 "is_active": True,
-                "created_at": datetime.utcnow() - timedelta(days=20)
+                "created_at": datetime.utcnow() - timedelta(days=20),
+                "updated_at": datetime.utcnow()
             },
             {
                 "_id": ObjectId("507f1f77bcf86cd799439014"),
@@ -95,20 +96,22 @@ def create_sample_data():
                 "role": "ticketer",
                 "station": "Hawassa Station",
                 "is_active": True,
-                "created_at": datetime.utcnow() - timedelta(days=18)
+                "created_at": datetime.utcnow() - timedelta(days=18),
+                "updated_at": datetime.utcnow()
             },
-            # Driver Users
             {
                 "_id": ObjectId("507f1f77bcf86cd799439015"),
-                "email": "driver1@ethiobus.com",
-                "password": "$2b$12$LQv3c1yqBWVHxkd0L8k7OeB8dZ8N5aYQGzg5YRwN5R5Y5WY5WY5W",
+                "email": "driver1@gmail.com",
+                "password": "$2b$12$AKsg0ej.o.UwcgqgKsGZt.CvY3B/cJ2urwgs5LmM36OM.tMMa3tpu",
                 "name": "Alemayehu Kebede",
                 "phone": "+251955667788",
                 "role": "driver",
                 "license_number": "ET-DL-001234",
+                "license_expiry": (datetime.utcnow() + timedelta(days=730)).strftime('%Y-%m-%d'),
                 "experience_years": 8,
                 "is_active": True,
-                "created_at": datetime.utcnow() - timedelta(days=15)
+                "created_at": datetime.utcnow() - timedelta(days=15),
+                "updated_at": datetime.utcnow()
             },
             {
                 "_id": ObjectId("507f1f77bcf86cd799439016"),
@@ -118,11 +121,12 @@ def create_sample_data():
                 "phone": "+251966778899",
                 "role": "driver",
                 "license_number": "ET-DL-005678",
+                "license_expiry": (datetime.utcnow() + timedelta(days=365)).strftime('%Y-%m-%d'),
                 "experience_years": 5,
                 "is_active": True,
-                "created_at": datetime.utcnow() - timedelta(days=12)
+                "created_at": datetime.utcnow() - timedelta(days=12),
+                "updated_at": datetime.utcnow()
             },
-            # Customer Users
             {
                 "_id": ObjectId("507f1f77bcf86cd799439017"),
                 "email": "customer1@example.com",
@@ -131,7 +135,8 @@ def create_sample_data():
                 "phone": "+251911889900",
                 "role": "customer",
                 "is_active": True,
-                "created_at": datetime.utcnow() - timedelta(days=10)
+                "created_at": datetime.utcnow() - timedelta(days=10),
+                "updated_at": datetime.utcnow()
             },
             {
                 "_id": ObjectId("507f1f77bcf86cd799439018"),
@@ -141,11 +146,11 @@ def create_sample_data():
                 "phone": "+251922990011",
                 "role": "customer",
                 "is_active": True,
-                "created_at": datetime.utcnow() - timedelta(days=8)
+                "created_at": datetime.utcnow() - timedelta(days=8),
+                "updated_at": datetime.utcnow()
             }
         ]
 
-        # 2. Create Buses
         print("🚌 Creating buses...")
         buses = [
             {
@@ -157,9 +162,8 @@ def create_sample_data():
                 "capacity": 45,
                 "amenities": ["WiFi", "AC", "Refreshments", "Charging Ports", "Entertainment", "Toilet"],
                 "status": "active",
-                "isActive": True,
-                "createdAt": datetime.utcnow() - timedelta(days=20),
-                "updatedAt": datetime.utcnow()
+                "created_at": datetime.utcnow() - timedelta(days=20),
+                "updated_at": datetime.utcnow()
             },
             {
                 "_id": ObjectId("607f1f77bcf86cd799439022"),
@@ -170,9 +174,8 @@ def create_sample_data():
                 "capacity": 52,
                 "amenities": ["AC", "Reclining Seats", "Reading Lights"],
                 "status": "active",
-                "isActive": True,
-                "createdAt": datetime.utcnow() - timedelta(days=18),
-                "updatedAt": datetime.utcnow()
+                "created_at": datetime.utcnow() - timedelta(days=18),
+                "updated_at": datetime.utcnow()
             },
             {
                 "_id": ObjectId("607f1f77bcf86cd799439023"),
@@ -183,9 +186,8 @@ def create_sample_data():
                 "capacity": 35,
                 "amenities": ["WiFi", "AC", "Refreshments", "Charging Ports", "Entertainment", "Reclining Seats", "Toilet", "Snacks"],
                 "status": "active",
-                "isActive": True,
-                "createdAt": datetime.utcnow() - timedelta(days=15),
-                "updatedAt": datetime.utcnow()
+                "created_at": datetime.utcnow() - timedelta(days=15),
+                "updated_at": datetime.utcnow()
             },
             {
                 "_id": ObjectId("607f1f77bcf86cd799439024"),
@@ -196,150 +198,212 @@ def create_sample_data():
                 "capacity": 45,
                 "amenities": ["WiFi", "AC", "Refreshments", "Charging Ports", "Toilet"],
                 "status": "maintenance",
-                "isActive": False,
                 "maintenance_notes": "Engine servicing and brake inspection",
                 "estimated_ready_time": datetime.utcnow() + timedelta(days=2),
-                "createdAt": datetime.utcnow() - timedelta(days=12),
-                "updatedAt": datetime.utcnow()
+                "created_at": datetime.utcnow() - timedelta(days=12),
+                "updated_at": datetime.utcnow()
             }
         ]
 
-        # 3. Create Ethiopian Routes
         print("🗺️ Creating routes...")
         routes = [
             {
                 "_id": ObjectId("707f1f77bcf86cd799439031"),
                 "name": "Addis Ababa to Bahir Dar",
-                "originCity": "Addis Ababa",
-                "destinationCity": "Bahir Dar",
-                "distanceKm": 578,
-                "estimatedDurationHours": 10,
-                "baseFareBirr": 450,
+                "origin_city": "Addis Ababa",
+                "destination_city": "Bahir Dar",
+                "distance_km": 578,
+                "estimated_duration_hours": 10,
+                "base_fare_birr": 450,
                 "stops": ["Debre Markos", "Debre Tabor"],
                 "is_active": True,
-                "created_at": datetime.utcnow() - timedelta(days=25)
+                "created_at": datetime.utcnow() - timedelta(days=25),
+                "updated_at": datetime.utcnow()
             },
             {
                 "_id": ObjectId("707f1f77bcf86cd799439032"),
                 "name": "Addis Ababa to Hawassa",
-                "originCity": "Addis Ababa",
-                "destinationCity": "Hawassa",
-                "distanceKm": 275,
-                "estimatedDurationHours": 5,
-                "baseFareBirr": 250,
+                "origin_city": "Addis Ababa",
+                "destination_city": "Hawassa",
+                "distance_km": 275,
+                "estimated_duration_hours": 5,
+                "base_fare_birr": 250,
                 "stops": ["Mojo", "Ziway"],
                 "is_active": True,
-                "created_at": datetime.utcnow() - timedelta(days=22)
+                "created_at": datetime.utcnow() - timedelta(days=22),
+                "updated_at": datetime.utcnow()
             },
             {
                 "_id": ObjectId("707f1f77bcf86cd799439033"),
                 "name": "Addis Ababa to Dire Dawa",
-                "originCity": "Addis Ababa",
-                "destinationCity": "Dire Dawa",
-                "distanceKm": 515,
-                "estimatedDurationHours": 9,
-                "baseFareBirr": 400,
+                "origin_city": "Addis Ababa",
+                "destination_city": "Dire Dawa",
+                "distance_km": 515,
+                "estimated_duration_hours": 9,
+                "base_fare_birr": 400,
                 "stops": ["Adama", "Aweday"],
                 "is_active": True,
-                "created_at": datetime.utcnow() - timedelta(days=20)
+                "created_at": datetime.utcnow() - timedelta(days=20),
+                "updated_at": datetime.utcnow()
             },
             {
                 "_id": ObjectId("707f1f77bcf86cd799439034"),
                 "name": "Addis Ababa to Mekele",
-                "originCity": "Addis Ababa",
-                "destinationCity": "Mekele",
-                "distanceKm": 783,
-                "estimatedDurationHours": 13,
-                "baseFareBirr": 600,
+                "origin_city": "Addis Ababa",
+                "destination_city": "Mekele",
+                "distance_km": 783,
+                "estimated_duration_hours": 13,
+                "base_fare_birr": 600,
                 "stops": ["Dessie", "Woldia"],
                 "is_active": True,
-                "created_at": datetime.utcnow() - timedelta(days=18)
+                "created_at": datetime.utcnow() - timedelta(days=18),
+                "updated_at": datetime.utcnow()
             },
             {
                 "_id": ObjectId("707f1f77bcf86cd799439035"),
                 "name": "Hawassa to Addis Ababa",
-                "originCity": "Hawassa",
-                "destinationCity": "Addis Ababa",
-                "distanceKm": 275,
-                "estimatedDurationHours": 5,
-                "baseFareBirr": 250,
+                "origin_city": "Hawassa",
+                "destination_city": "Addis Ababa",
+                "distance_km": 275,
+                "estimated_duration_hours": 5,
+                "base_fare_birr": 250,
                 "stops": ["Ziway", "Mojo"],
                 "is_active": True,
-                "created_at": datetime.utcnow() - timedelta(days=15)
+                "created_at": datetime.utcnow() - timedelta(days=15),
+                "updated_at": datetime.utcnow()
             }
         ]
 
-        # 4. Create Bus Schedules (Today, Tomorrow, and Future dates)
-        print("🕒 Creating bus schedules...")
+        print("🕒 Creating bus schedules with proper active trips logic...")
+        print("   Active Trips = scheduled + boarding + departed + active")
+        print("   On Route Trips = departed + active")
         schedules = []
         today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        yesterday = today - timedelta(days=1)
         tomorrow = today + timedelta(days=1)
         
-        schedule_dates = [today, tomorrow, today + timedelta(days=2), today + timedelta(days=3)]
+        # Create schedules for multiple days
+        schedule_dates = [
+            yesterday,           # Past trips (completed/cancelled)
+            today,              # Today's trips (mix of statuses)
+            tomorrow,           # Tomorrow (scheduled)
+            today + timedelta(days=2),  # Future (scheduled)
+            today + timedelta(days=3)   # Future (scheduled)
+        ]
+        schedule_counter = 0
+        status_distribution = {'scheduled': 0, 'boarding': 0, 'departed': 0, 'active': 0, 'completed': 0, 'cancelled': 0}
         
         for schedule_date in schedule_dates:
+            # Determine date category
+            if schedule_date < today:
+                date_category = 'past'
+            elif schedule_date == today:
+                date_category = 'today'
+            else:
+                date_category = 'future'
+            
             for route in routes:
-                # Skip return routes for some dates to create variety
+                # Skip some return routes randomly
                 if "to Addis Ababa" in route['name'] and random.choice([True, False]):
                     continue
-                    
+                
                 bus = random.choice([b for b in buses if b['status'] == 'active'])
                 driver = random.choice([u for u in users if u['role'] == 'driver'])
                 
-                # Create morning schedule (6:00 AM - 8:00 AM)
-                morning_times = ["06:00", "07:00", "08:00"]
+                # Morning schedule
+                morning_times = ["06:00", "07:00", "08:00", "09:00"]
                 morning_time = random.choice(morning_times)
+                arrival_time = calculate_arrival_time(morning_time, route['estimated_duration_hours'])
+                
+                # Determine status based on date - THIS IS THE KEY LOGIC
+                if date_category == 'past':
+                    # Past trips are either completed or cancelled
+                    status = random.choices(['completed', 'cancelled'], weights=[85, 15])[0]
+                elif date_category == 'today':
+                    # Today's trips distributed across operational statuses
+                    # This creates realistic "Active Trips" for dashboard
+                    status_options = ['scheduled', 'boarding', 'departed', 'active', 'completed']
+                    status_weights = [30, 20, 20, 20, 10]  # More active, less completed
+                    status = random.choices(status_options, weights=status_weights)[0]
+                else:
+                    # Future trips are all scheduled
+                    status = 'scheduled'
+                
+                status_distribution[status] += 1
+                schedule_id = ObjectId()
                 
                 morning_schedule = {
-                    "_id": ObjectId(),
-                    "routeId": str(route['_id']),
-                    "busId": str(bus['_id']),
-                    "busType": bus['type'],
-                    "busNumber": bus['bus_number'],
-                    "departureTime": morning_time,
-                    "arrivalTime": calculate_arrival_time(morning_time, route['estimatedDurationHours']),
-                    "departureDate": schedule_date,
-                    "availableSeats": bus['capacity'],
-                    "fareBirr": calculate_fare(route['baseFareBirr'], bus['type']),
-                    "status": "scheduled",
+                    "_id": schedule_id,
+                    "route_id": str(route['_id']),
+                    "bus_id": str(bus['_id']),
+                    "bus_type": bus['type'],
+                    "bus_number": bus['bus_number'],
+                    "plate_number": bus['plate_number'],
+                    "route_name": route['name'],
+                    "origin_city": route['origin_city'],
+                    "destination_city": route['destination_city'],
+                    "departure_date": schedule_date,
+                    "departure_time": morning_time,
+                    "arrival_time": arrival_time,
+                    "total_seats": bus['capacity'],
+                    "available_seats": bus['capacity'],
+                    "booked_seats": 0,
+                    "fare_birr": calculate_fare(route['base_fare_birr'], bus['type']),
+                    "status": status,
                     "amenities": bus['amenities'],
-                    "originCity": route['originCity'],
-                    "destinationCity": route['destinationCity'],
                     "driver_id": str(driver['_id']),
                     "driver_name": driver['name'],
-                    "created_at": datetime.utcnow(),
+                    "created_at": datetime.utcnow() - timedelta(days=random.randint(5, 15)),
                     "updated_at": datetime.utcnow()
                 }
                 schedules.append(morning_schedule)
+                schedule_counter += 1
                 
-                # Create afternoon schedule (1:00 PM - 3:00 PM) for popular routes
-                if route['originCity'] == 'Addis Ababa' and random.choice([True, False]):
-                    afternoon_times = ["13:00", "14:00", "15:00"]
+                # Add afternoon schedule for major routes
+                if route['origin_city'] == 'Addis Ababa' and random.choice([True, True, False]):
+                    afternoon_times = ["13:00", "14:00", "15:00", "16:00"]
                     afternoon_time = random.choice(afternoon_times)
+                    afternoon_arrival = calculate_arrival_time(afternoon_time, route['estimated_duration_hours'])
                     
+                    # Determine afternoon status
+                    if date_category == 'past':
+                        afternoon_status = random.choices(['completed', 'cancelled'], weights=[85, 15])[0]
+                    elif date_category == 'today':
+                        status_options = ['scheduled', 'boarding', 'departed', 'active', 'completed']
+                        status_weights = [35, 25, 15, 15, 10]
+                        afternoon_status = random.choices(status_options, weights=status_weights)[0]
+                    else:
+                        afternoon_status = 'scheduled'
+                    
+                    status_distribution[afternoon_status] += 1
+                    afternoon_id = ObjectId()
                     afternoon_schedule = {
-                        "_id": ObjectId(),
-                        "routeId": str(route['_id']),
-                        "busId": str(bus['_id']),
-                        "busType": bus['type'],
-                        "busNumber": bus['bus_number'],
-                        "departureTime": afternoon_time,
-                        "arrivalTime": calculate_arrival_time(afternoon_time, route['estimatedDurationHours']),
-                        "departureDate": schedule_date,
-                        "availableSeats": bus['capacity'],
-                        "fareBirr": calculate_fare(route['baseFareBirr'], bus['type']),
-                        "status": "scheduled",
+                        "_id": afternoon_id,
+                        "route_id": str(route['_id']),
+                        "bus_id": str(bus['_id']),
+                        "bus_type": bus['type'],
+                        "bus_number": bus['bus_number'],
+                        "plate_number": bus['plate_number'],
+                        "route_name": route['name'],
+                        "origin_city": route['origin_city'],
+                        "destination_city": route['destination_city'],
+                        "departure_date": schedule_date,
+                        "departure_time": afternoon_time,
+                        "arrival_time": afternoon_arrival,
+                        "total_seats": bus['capacity'],
+                        "available_seats": bus['capacity'],
+                        "booked_seats": 0,
+                        "fare_birr": calculate_fare(route['base_fare_birr'], bus['type']),
+                        "status": afternoon_status,
                         "amenities": bus['amenities'],
-                        "originCity": route['originCity'],
-                        "destinationCity": route['destinationCity'],
                         "driver_id": str(driver['_id']),
                         "driver_name": driver['name'],
-                        "created_at": datetime.utcnow(),
+                        "created_at": datetime.utcnow() - timedelta(days=random.randint(5, 15)),
                         "updated_at": datetime.utcnow()
                     }
                     schedules.append(afternoon_schedule)
+                    schedule_counter += 1
 
-        # 5. Create Driver Assignments
         print("👨‍💼 Creating driver assignments...")
         driver_assignments = []
         for schedule in schedules:
@@ -347,93 +411,84 @@ def create_sample_data():
                 "_id": ObjectId(),
                 "driver_id": schedule['driver_id'],
                 "schedule_id": str(schedule['_id']),
-                "route_id": schedule['routeId'],
-                "bus_id": schedule['busId'],
+                "route_id": schedule['route_id'],
+                "bus_id": schedule['bus_id'],
                 "assigned_date": datetime.utcnow() - timedelta(days=random.randint(1, 5)),
-                "assigned_by": users[0]['_id'],  # Admin assigned
+                "assigned_by": str(users[0]['_id']),
                 "status": "active"
             }
             driver_assignments.append(assignment)
 
-        # 6. Create Bookings with Various Statuses
         print("🎫 Creating bookings...")
         bookings = []
         payments = []
-        
-        # Passenger names for variety
-        passenger_names = [
-            "Abraham Worku", "Meron Tesfaye", "Dawit Bekele", "Sara Mohammed", 
-            "Yonas Tadesse", "Hana Girma", "Elias Getachew", "Marta Assefa",
-            "Tewodros Getnet", "Selamawit Abebe", "Kaleb Mesfin", "Ruth Solomon"
-        ]
-        
+        passenger_names = ["Abraham Worku", "Meron Tesfaye", "Dawit Bekele", "Sara Mohammed", 
+                          "Yonas Tadesse", "Hana Girma", "Elias Getachew", "Marta Assefa",
+                          "Tewodros Getnet", "Selamawit Abebe", "Kaleb Mesfin", "Ruth Solomon"]
         booking_statuses = ['confirmed', 'pending', 'checked_in', 'completed', 'cancelled']
         
         for i, schedule in enumerate(schedules):
-            # Create 2-5 bookings per schedule
             num_bookings = random.randint(2, 5)
-            
             for j in range(num_bookings):
                 num_seats = random.randint(1, 3)
-                seat_numbers = [f"{random.randint(1, bus['capacity']//2)}{chr(random.randint(65, 70))}" 
-                               for _ in range(num_seats)]
-                
+                seat_numbers = [f"{random.randint(1, 20)}{chr(random.randint(65, 68))}" for _ in range(num_seats)]
                 passenger_name = passenger_names[(i + j) % len(passenger_names)]
                 customer = random.choice([u for u in users if u['role'] == 'customer'])
-                status = random.choices(
-                    booking_statuses,
-                    weights=[40, 20, 15, 15, 10],  # More confirmed, fewer cancelled
-                    k=1
-                )[0]
+                status = random.choices(booking_statuses, weights=[40, 20, 15, 15, 10], k=1)[0]
                 
-                # Create booking
+                booking_id = ObjectId()
+                booking_created_at = schedule['departure_date'] - timedelta(days=random.randint(1, 14))
+                
                 booking = {
-                    "_id": ObjectId(),
-                    "pnr_number": f"ETB{schedule['departureDate'].strftime('%Y%m%d')}{(i*10 + j + 1):04d}",
+                    "_id": booking_id,
+                    "pnr_number": f"ETB{schedule['departure_date'].strftime('%Y%m%d')}{(i*10 + j + 1):04d}",
                     "schedule_id": str(schedule['_id']),
-                    "user_id": customer['_id'],
+                    "user_id": str(customer['_id']),
                     "passenger_name": passenger_name,
                     "passenger_phone": f"+2519{random.randint(10000000, 99999999)}",
                     "passenger_email": f"{passenger_name.lower().replace(' ', '.')}@gmail.com",
                     "seat_numbers": seat_numbers,
                     "status": status,
-                    "departure_city": schedule['originCity'],
-                    "arrival_city": schedule['destinationCity'],
-                    "travel_date": schedule['departureDate'].strftime('%Y-%m-%d'),
-                    "departure_time": schedule['departureTime'],
-                    "arrival_time": schedule['arrivalTime'],
-                    "total_amount": schedule['fareBirr'] * num_seats,
-                    "base_fare": schedule['fareBirr'],
+                    "departure_city": schedule['origin_city'],
+                    "arrival_city": schedule['destination_city'],
+                    "travel_date": schedule['departure_date'],
+                    "departure_time": schedule['departure_time'],
+                    "arrival_time": schedule['arrival_time'],
+                    "total_amount": schedule['fare_birr'] * num_seats,
+                    "base_fare": schedule['fare_birr'],
                     "payment_status": "paid" if status in ['confirmed', 'checked_in', 'completed'] else "pending",
                     "payment_method": random.choice(["chapa", "telebirr", "cash", "bank"]),
                     "bus_company": "EthioBus",
-                    "bus_type": schedule['busType'],
-                    "bus_number": schedule['busNumber'],
+                    "bus_type": schedule['bus_type'],
+                    "bus_number": schedule['bus_number'],
                     "has_baggage": random.choice([True, False]),
                     "baggage_weight": random.randint(5, 25) if random.choice([True, False]) else 0,
                     "baggage_fee": 0,
-                    "created_at": schedule['departureDate'] - timedelta(days=random.randint(1, 14)),
+                    "checked_in": status == 'checked_in',
+                    "user": {
+                        "name": customer['name'],
+                        "email": customer['email'],
+                        "phone": customer['phone']
+                    },
+                    "created_at": booking_created_at,
                     "updated_at": datetime.utcnow()
                 }
                 
-                # Add baggage fee if applicable
                 if booking['has_baggage'] and booking['baggage_weight'] > 0:
                     booking['baggage_fee'] = calculate_baggage_fee(booking['baggage_weight'])
                     booking['total_amount'] += booking['baggage_fee']
                     booking['baggage_tag'] = f"BT{booking['pnr_number'][-6:]}"
                 
-                # Add check-in info if status is checked_in
                 if status == 'checked_in':
                     booking['checked_in_at'] = booking['created_at'] + timedelta(hours=random.randint(1, 24))
-                    booking['checked_in_by'] = random.choice([u for u in users if u['role'] == 'ticketer'])['_id']
+                    booking['checked_in_by'] = str(random.choice([u for u in users if u['role'] == 'ticketer'])['_id'])
                 
                 bookings.append(booking)
                 
-                # Create corresponding payment
                 if booking['payment_status'] == 'paid':
                     payment = {
                         "_id": ObjectId(),
-                        "user_id": customer['_id'],
+                        "user_id": str(customer['_id']),
                         "booking_id": str(booking['_id']),
                         "tx_ref": f"ethiobus-{int(booking['created_at'].timestamp())}{i}{j}",
                         "amount": booking['total_amount'],
@@ -446,100 +501,91 @@ def create_sample_data():
                     }
                     payments.append(payment)
                 
-                # Update available seats in schedule
-                schedule['availableSeats'] -= num_seats
+                # Update schedule seat counts
+                schedule['available_seats'] -= num_seats
+                schedule['booked_seats'] = schedule.get('booked_seats', 0) + num_seats
 
-        # 7. Insert all data into database
         print("🚀 Inserting data into database...")
-        
-        # Insert users
         users_result = db.users.insert_many(users)
         print(f"✅ Inserted {len(users_result.inserted_ids)} users")
         
-        # Insert buses
         buses_result = db.buses.insert_many(buses)
         print(f"✅ Inserted {len(buses_result.inserted_ids)} buses")
         
-        # Insert routes
         routes_result = db.routes.insert_many(routes)
         print(f"✅ Inserted {len(routes_result.inserted_ids)} routes")
         
-        # Insert schedules
         schedules_result = db.busschedules.insert_many(schedules)
         print(f"✅ Inserted {len(schedules_result.inserted_ids)} schedules")
         
-        # Insert driver assignments
         assignments_result = db.driver_assignments.insert_many(driver_assignments)
         print(f"✅ Inserted {len(assignments_result.inserted_ids)} driver assignments")
         
-        # Insert bookings
         bookings_result = db.bookings.insert_many(bookings)
         print(f"✅ Inserted {len(bookings_result.inserted_ids)} bookings")
         
-        # Insert payments
         payments_result = db.payments.insert_many(payments)
         print(f"✅ Inserted {len(payments_result.inserted_ids)} payments")
 
-        # 8. Generate Summary Report
+        # Calculate statistics
+        booking_status_counts = {}
+        for booking in bookings:
+            status = booking['status']
+            booking_status_counts[status] = booking_status_counts.get(status, 0) + 1
+        
+        total_revenue = sum(p['amount'] for p in payments)
+        
+        # Calculate active trips metrics
+        active_trips = status_distribution['scheduled'] + status_distribution['boarding'] + status_distribution['departed'] + status_distribution['active']
+        on_route_trips = status_distribution['departed'] + status_distribution['active']
+        
         print("\n🎉 Sample data insertion completed!")
-        print("=" * 60)
+        print("=" * 80)
         print("📊 DATA SUMMARY:")
         print(f"👥 Users: {len(users)} (Admin: 1, Operator: 1, Ticketers: 2, Drivers: 2, Customers: 2)")
         print(f"🚌 Buses: {len(buses)} (Active: 3, Maintenance: 1)")
-        print(f"🗺️ Routes: {len(routes)}")
+        print(f"🗺️  Routes: {len(routes)}")
         print(f"🕒 Schedules: {len(schedules)}")
         print(f"👨‍💼 Driver Assignments: {len(driver_assignments)}")
         print(f"🎫 Bookings: {len(bookings)}")
         print(f"💰 Payments: {len(payments)}")
         
-        # Booking status breakdown
-        status_counts = {}
-        for booking in bookings:
-            status = booking['status']
-            status_counts[status] = status_counts.get(status, 0) + 1
+        print("\n📈 SCHEDULE STATUS BREAKDOWN (Active Trips Logic):")
+        print(f"  ✅ Active Trips: {active_trips} (scheduled + boarding + departed + active)")
+        print(f"     • Scheduled: {status_distribution['scheduled']} (awaiting departure)")
+        print(f"     • Boarding: {status_distribution['boarding']} (loading passengers)")
+        print(f"     • Departed: {status_distribution['departed']} (just left)")
+        print(f"     • Active: {status_distribution['active']} (on route)")
+        print(f"  🚌 On Route Trips: {on_route_trips} (departed + active)")
+        print(f"  ✔️  Completed: {status_distribution['completed']}")
+        print(f"  ❌ Cancelled: {status_distribution['cancelled']}")
         
         print("\n📈 BOOKING STATUS BREAKDOWN:")
-        for status, count in status_counts.items():
+        for status, count in booking_status_counts.items():
             print(f"  • {status.capitalize()}: {count}")
         
-        total_revenue = sum(p['amount'] for p in payments)
-        print(f"💰 Total Revenue: {total_revenue:,} ETB")
+        print(f"\n💰 Total Revenue: {total_revenue:,} ETB")
+        print("=" * 80)
         
-        print("=" * 60)
         print("\n🔑 LOGIN CREDENTIALS:")
         print("Admin: admin@ethiobus.com / password123")
         print("Operator: operator@ethiobus.com / password123")
         print("Ticketer 1: ticketer1@ethiobus.com / password123")
         print("Ticketer 2: ticketer2@ethiobus.com / password123")
-        print("Driver 1: driver1@ethiobus.com / password123")
+        print("Driver 1: driver1@gmail.com / password123")
         print("Driver 2: driver2@ethiobus.com / password123")
         print("Customer 1: customer1@example.com / password123")
         print("Customer 2: customer2@example.com / password123")
+        print("=" * 80)
         
-        print("=" * 60)
-        print("\n🎫 SAMPLE PNR NUMBERS FOR CHECK-IN:")
-        confirmed_pnrs = [b['pnr_number'] for b in bookings if b['status'] == 'confirmed']
-        for pnr in confirmed_pnrs[:5]:
-            booking = next(b for b in bookings if b['pnr_number'] == pnr)
-            print(f"  • {pnr} - {booking['passenger_name']} - {booking['departure_city']} → {booking['arrival_city']}")
-        
-        print("=" * 60)
-        print("\n🚌 TODAY'S SCHEDULES:")
-        today_schedules = [s for s in schedules if s['departureDate'].date() == today.date()]
-        for schedule in today_schedules[:3]:
-            print(f"  • {schedule['departureTime']} - {schedule['originCity']} → {schedule['destinationCity']} - {schedule['busType']}")
-        
-        print("=" * 60)
-
-        return {
-            "users": len(users),
-            "buses": len(buses),
-            "routes": len(routes),
-            "schedules": len(schedules),
-            "bookings": len(bookings),
-            "payments": len(payments),
-            "revenue": total_revenue
-        }
+        print("\n✨ KEY IMPROVEMENTS:")
+        print("  • Consistent snake_case field naming throughout")
+        print("  • Proper active trips logic implemented")
+        print("  • Single datetime format for departure_date")
+        print("  • Realistic status distribution for today's trips")
+        print("  • Past trips are completed/cancelled")
+        print("  • Future trips are scheduled")
+        print("  • Dashboard will show accurate active trip counts")
 
 if __name__ == "__main__":
-    create_sample_data()
+    create_full_data()

@@ -21,6 +21,64 @@ def get_current_driver():
         print(f"❌ Error getting current driver: {e}")
         return None
 
+def calculate_duration(departure_time, arrival_time):
+    """Calculate duration between departure and arrival times"""
+    try:
+        if not departure_time or not arrival_time:
+            return None
+        
+        # Parse times (format: "HH:MM")
+        dep_parts = departure_time.split(':')
+        arr_parts = arrival_time.split(':')
+        
+        dep_hours = int(dep_parts[0])
+        dep_minutes = int(dep_parts[1]) if len(dep_parts) > 1 else 0
+        arr_hours = int(arr_parts[0])
+        arr_minutes = int(arr_parts[1]) if len(arr_parts) > 1 else 0
+        
+        # Calculate total minutes
+        dep_total_minutes = dep_hours * 60 + dep_minutes
+        arr_total_minutes = arr_hours * 60 + arr_minutes
+        
+        # Handle overnight journeys
+        if arr_total_minutes < dep_total_minutes:
+            arr_total_minutes += 24 * 60
+        
+        # Calculate duration
+        duration_minutes = arr_total_minutes - dep_total_minutes
+        hours = duration_minutes // 60
+        minutes = duration_minutes % 60
+        
+        # Format duration
+        if hours > 0 and minutes > 0:
+            return f"{hours}h {minutes}m"
+        elif hours > 0:
+            return f"{hours}h"
+        else:
+            return f"{minutes}m"
+    except Exception as e:
+        print(f"Error calculating duration: {e}")
+        return None
+
+def get_schedule_id_query(schedule_id):
+    """Get query for schedule_id that works with both string and ObjectId"""
+    try:
+        return {'schedule_id': schedule_id}
+    except:
+        return {'schedule_id': schedule_id}
+
+def get_schedule_id_query(schedule_id):
+    """Create a query that works with both string and ObjectId schedule_id formats"""
+    try:
+        return {
+            '$or': [
+                {'schedule_id': schedule_id},  # String format
+                {'schedule_id': ObjectId(schedule_id)}  # ObjectId format
+            ]
+        }
+    except:
+        return {'schedule_id': schedule_id}
+
 # ==================== DEBUG ====================
 @driver_app_bp.route('/debug/info', methods=['GET'])
 @jwt_required()
@@ -53,9 +111,9 @@ def debug_driver_info():
                     '_id': str(t['_id']),
                     'driver_id': t.get('driver_id'),
                     'status': t.get('status'),
-                    'departureDate': str(t.get('departureDate')),
-                    'origin': t.get('originCity'),
-                    'destination': t.get('destinationCity')
+                    'departure_date': str(t.get('departure_date')),
+                    'origin': t.get('origin_city'),
+                    'destination': t.get('destination_city')
                 }
                 for t in all_trips[:3]
             ]
@@ -78,56 +136,107 @@ def get_driver_stats():
             return jsonify({'error': 'Driver not found'}), 404
         
         driver_id = str(driver['_id'])
-        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        now = datetime.utcnow()
+        today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_str = today.strftime('%Y-%m-%d')
+        tomorrow_str = (today + timedelta(days=1)).strftime('%Y-%m-%d')
         
-        # Get today's trips
+        print(f"📊 Getting stats for driver: {driver_id}")
+        print(f"📅 Today: {today_str}")
+        
+        # Get ALL trips for this driver to debug
+        all_trips = list(mongo.db.busschedules.find({'driver_id': driver_id}))
+        print(f"🔍 Total trips found for driver: {len(all_trips)}")
+        
+        # Get today's trips - handle both string and datetime formats
         today_trips = list(mongo.db.busschedules.find({
             'driver_id': driver_id,
-            'departureDate': {'$gte': today, '$lt': today + timedelta(days=1)}
+            '$or': [
+                {'departure_date': {'$gte': today, '$lt': today + timedelta(days=1)}},
+                {'departure_date': {'$gte': today_str, '$lt': tomorrow_str}}
+            ]
         }))
         
+        print(f"📅 Today's trips: {len(today_trips)}")
+        
         # Get upcoming trips (next 7 days)
+        week_from_now_str = (today + timedelta(days=7)).strftime('%Y-%m-%d')
         upcoming_trips = list(mongo.db.busschedules.find({
             'driver_id': driver_id,
-            'departureDate': {'$gte': today, '$lt': today + timedelta(days=7)}
-        }).sort('departureDate', 1))
+            '$or': [
+                {'departure_date': {'$gte': today, '$lt': today + timedelta(days=7)}},
+                {'departure_date': {'$gte': today_str, '$lt': week_from_now_str}}
+            ]
+        }).sort('departure_date', 1))
+        
+        print(f"📅 Upcoming trips (7 days): {len(upcoming_trips)}")
         
         # Get active trip (currently in progress)
         active_trip = mongo.db.busschedules.find_one({
             'driver_id': driver_id,
-            'status': 'departed',
-            'departureDate': {'$lte': datetime.utcnow()}
+            'status': {'$in': ['departed', 'active', 'in_progress']},
+            '$or': [
+                {'departure_date': {'$lte': now}},
+                {'departure_date': {'$lte': today_str}}
+            ]
         })
+        
+        print(f"🚌 Active trip: {active_trip['_id'] if active_trip else 'None'}")
         
         # Calculate total passengers for today
         total_passengers_today = 0
         checked_in_today = 0
         
         for trip in today_trips:
-            bookings = list(mongo.db.bookings.find({
-                'schedule_id': str(trip['_id']),
-                'status': {'$in': ['confirmed', 'checked_in']}
-            }))
+            query = get_schedule_id_query(str(trip['_id']))
+            query['status'] = {'$in': ['confirmed', 'checked_in', 'pending']}
+            query['payment_status'] = 'paid'
+            bookings = list(mongo.db.bookings.find(query))
             total_passengers_today += len(bookings)
             checked_in_today += len([b for b in bookings if b.get('status') == 'checked_in'])
         
+        print(f"👥 Total passengers today: {total_passengers_today}")
+        
         # Get monthly stats
         month_start = today.replace(day=1)
+        month_start_str = month_start.strftime('%Y-%m-%d')
         monthly_trips = mongo.db.busschedules.count_documents({
             'driver_id': driver_id,
-            'departureDate': {'$gte': month_start},
-            'status': {'$in': ['completed', 'departed']}
+            '$or': [
+                {'departure_date': {'$gte': month_start}},
+                {'departure_date': {'$gte': month_start_str}}
+            ],
+            'status': {'$in': ['completed', 'departed', 'arrived']}
         })
+        
+        print(f"📊 Monthly completed trips: {monthly_trips}")
+        
+        # Prepare active trip info with route details
+        active_trip_info = None
+        if active_trip:
+            route_id = active_trip.get('routeId') or active_trip.get('route_id')
+            route = None
+            if route_id:
+                try:
+                    route = mongo.db.routes.find_one({'_id': ObjectId(route_id)})
+                except:
+                    pass
+            
+            active_trip_info = {
+                '_id': str(active_trip['_id']),
+                'route': {
+                    'origin': route.get('origin_city') if route else active_trip.get('origin_city'),
+                    'destination': route.get('destination_city') if route else active_trip.get('destination_city')
+                },
+                'route_name': active_trip.get('route_name'),
+                'departure_time': active_trip.get('departure_time'),
+                'status': active_trip.get('status')
+            }
         
         stats = {
             'today_trips': len(today_trips),
             'upcoming_trips': len(upcoming_trips),
-            'active_trip': {
-                '_id': str(active_trip['_id']),
-                'route': active_trip.get('route_name'),
-                'departure_time': active_trip.get('departureTime'),
-                'status': active_trip.get('status')
-            } if active_trip else None,
+            'active_trip': active_trip_info,
             'total_passengers_today': total_passengers_today,
             'checked_in_today': checked_in_today,
             'monthly_trips': monthly_trips,
@@ -138,9 +247,14 @@ def get_driver_stats():
             }
         }
         
+        print(f"✅ Stats response: {stats}")
+        
         return jsonify(stats), 200
         
     except Exception as e:
+        print(f"❌ Dashboard stats error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 # ==================== TRIPS ====================
@@ -168,7 +282,7 @@ def get_driver_trips():
                 query['status'] = status
         
         # Get trips
-        trips = list(mongo.db.busschedules.find(query).sort('departureDate', -1))
+        trips = list(mongo.db.busschedules.find(query).sort('departure_date', -1))
         
         # Serialize trips
         from app.routes.operator import serialize_document
@@ -177,11 +291,10 @@ def get_driver_trips():
             trip_data = serialize_document(trip)
             
             # Add passenger count
-            passenger_count = mongo.db.bookings.count_documents({
-                'schedule_id': str(trip['_id']),
-                'status': {'$in': ['confirmed', 'checked_in', 'completed']},
-                'payment_status': 'paid'
-            })
+            query = get_schedule_id_query(str(trip['_id']))
+            query['status'] = {'$in': ['confirmed', 'checked_in', 'completed', 'pending']}
+            query['payment_status'] = 'paid'
+            passenger_count = mongo.db.bookings.count_documents(query)
             trip_data['passenger_count'] = passenger_count
             
             serialized_trips.append(trip_data)
@@ -212,7 +325,7 @@ def get_active_trip():
         # DEBUG: Check if test schedule exists
         test_schedule = mongo.db.busschedules.find_one({'_id': ObjectId('691e10717be2deb203bcab48')})
         if test_schedule:
-            print(f"🧪 Test schedule exists: driver_id={test_schedule.get('driver_id')}, status={test_schedule.get('status')}, date={test_schedule.get('departureDate')}")
+            print(f"🧪 Test schedule exists: driver_id={test_schedule.get('driver_id')}, status={test_schedule.get('status')}, date={test_schedule.get('departure_date')}")
         
         # First, try to find any trip assigned to this driver
         all_driver_trips = list(mongo.db.busschedules.find({'driver_id': driver_id}))
@@ -224,7 +337,7 @@ def get_active_trip():
         
         if all_driver_trips:
             for trip in all_driver_trips:
-                dep_date = trip.get('departureDate')
+                dep_date = trip.get('departure_date')
                 # Handle both string and datetime formats
                 if isinstance(dep_date, str):
                     try:
@@ -243,7 +356,7 @@ def get_active_trip():
         active_trip = mongo.db.busschedules.find_one({
             'driver_id': driver_id,
             'status': {'$in': ['boarding', 'departed', 'active', 'in_progress']},
-            'departureDate': {'$lte': now}  # Only trips from today or earlier
+            'departure_date': {'$lte': now}  # Only trips from today or earlier
         })
         
         # Strategy 2: Find today's trip that's within 2 hours of departure
@@ -254,7 +367,7 @@ def get_active_trip():
             print(f"📅 Looking for trips today between {today_start} and {today_end}")
             
             # Get all trips for this driver with today's status
-            # We'll filter by date manually since departureDate might be string or datetime
+            # We'll filter by date manually since departure_date might be string or datetime
             query_filter = {
                 'driver_id': driver_id,
                 'status': {'$in': ['scheduled', 'boarding', 'departed', 'active', 'in_progress']}
@@ -267,10 +380,10 @@ def get_active_trip():
             # Filter to only today's trips (handle both string and datetime)
             filtered_trips = []
             for trip in todays_trips:
-                dep_date = trip.get('departureDate')
+                dep_date = trip.get('departure_date')
                 dep_date_original = dep_date
                 
-                print(f"  🔍 Checking trip {trip.get('_id')}: departureDate={dep_date} (type: {type(dep_date).__name__})")
+                print(f"  🔍 Checking trip {trip.get('_id')}: departure_date={dep_date} (type: {type(dep_date).__name__})")
                 
                 # Convert string to datetime if needed
                 if isinstance(dep_date, str):
@@ -312,8 +425,8 @@ def get_active_trip():
                             if hasattr(departure_datetime, 'tzinfo') and departure_datetime.tzinfo is not None:
                                 departure_datetime = departure_datetime.replace(tzinfo=None)
                     else:
-                        # Fallback: parse departureTime string
-                        departure_time_str = trip.get('departureTime', '00:00')
+                        # Fallback: parse departure_time string
+                        departure_time_str = trip.get('departure_time', '00:00')
                         time_parts = departure_time_str.split(':')
                         departure_hour = int(time_parts[0])
                         departure_minute = int(time_parts[1]) if len(time_parts) > 1 else 0
@@ -377,10 +490,13 @@ def get_active_trip():
             try:
                 route = mongo.db.routes.find_one({'_id': ObjectId(route_id)})
                 if route:
-                    trip_data['origin'] = route.get('originCity')
-                    trip_data['destination'] = route.get('destinationCity')
-                    trip_data['departure_city'] = route.get('originCity')
-                    trip_data['arrival_city'] = route.get('destinationCity')
+                    trip_data['origin'] = route.get('origin_city')
+                    trip_data['destination'] = route.get('destination_city')
+                    trip_data['departure_city'] = route.get('origin_city')
+                    trip_data['arrival_city'] = route.get('destination_city')
+                    # Add distance information for tracking
+                    trip_data['distance_km'] = route.get('distance_km', 0)
+                    trip_data['total_distance_km'] = route.get('distance_km', 0)
             except Exception as route_error:
                 print(f"⚠️ Error fetching route: {route_error}")
         
@@ -409,7 +525,7 @@ def get_active_trip():
         
         # Add departure time
         if not trip_data.get('departure_time'):
-            trip_data['departure_time'] = active_trip.get('departureTime') or 'N/A'
+            trip_data['departure_time'] = active_trip.get('departure_time') or 'N/A'
         
         print(f"📦 Returning trip data: {trip_data.get('_id')}")
         
@@ -440,9 +556,9 @@ def get_upcoming_trips():
         # Get trips from now to next 30 days
         trips = list(mongo.db.busschedules.find({
             'driver_id': driver_id,
-            'departureDate': {'$gte': now, '$lt': now + timedelta(days=30)},
+            'departure_date': {'$gte': now, '$lt': now + timedelta(days=30)},
             'status': {'$in': ['scheduled', 'delayed']}
-        }).sort('departureDate', 1))
+        }).sort('departure_date', 1))
         
         enriched_trips = []
         for trip in trips:
@@ -465,24 +581,27 @@ def get_upcoming_trips():
                     bus = mongo.db.buses.find_one({'_id': bus_id})
             
             # Count passengers
-            total_bookings = mongo.db.bookings.count_documents({
-                'schedule_id': str(trip['_id']),
-                'status': {'$in': ['confirmed', 'checked_in']}
-            })
+            query = get_schedule_id_query(str(trip['_id']))
+            query['status'] = {'$in': ['confirmed', 'checked_in', 'pending']}
+            total_bookings = mongo.db.bookings.count_documents(query)
+            
+            # Calculate duration
+            duration = calculate_duration(trip.get('departure_time'), trip.get('arrival_time'))
             
             enriched_trips.append({
                 '_id': str(trip['_id']),
-                'departure_date': trip.get('departureDate') or trip.get('departure_date'),
-                'departure_time': trip.get('departureTime') or trip.get('departure_time'),
-                'arrival_time': trip.get('arrivalTime') or trip.get('arrival_time'),
+                'departure_date': trip.get('departure_date'),
+                'departure_time': trip.get('departure_time'),
+                'arrival_time': trip.get('arrival_time'),
                 'status': trip.get('status'),
-                'origin': trip.get('origin_city') or (route.get('originCity') if route else 'N/A'),
-                'destination': trip.get('destination_city') or (route.get('destinationCity') if route else 'N/A'),
+                'origin': trip.get('origin_city') or (route.get('origin_city') if route else 'N/A'),
+                'destination': trip.get('destination_city') or (route.get('destination_city') if route else 'N/A'),
+                'estimated_duration': duration,
                 'route': {
-                    'origin': route.get('originCity'),
-                    'destination': route.get('destinationCity'),
-                    'distance': route.get('distanceKm'),
-                    'duration': route.get('estimatedDurationHours')
+                    'origin': route.get('origin_city'),
+                    'destination': route.get('destination_city'),
+                    'distance': route.get('distance_km'),
+                    'duration': route.get('estimated_duration_hours')
                 } if route else None,
                 'bus': {
                     'number': bus.get('bus_number') if bus else trip.get('bus_number'),
@@ -519,65 +638,91 @@ def get_trip_details(trip_id):
         if trip.get('driver_id') != str(driver['_id']):
             return jsonify({'error': 'Unauthorized access to this trip'}), 403
         
-        # Get route and bus details
-        route = mongo.db.routes.find_one({'_id': ObjectId(trip['routeId'])})
-        bus = mongo.db.buses.find_one({'_id': ObjectId(trip['busId'])})
+        # Get route and bus details safely
+        route = None
+        route_id = trip.get('routeId') or trip.get('route_id')
+        if route_id:
+            try:
+                route = mongo.db.routes.find_one({'_id': ObjectId(route_id)})
+            except:
+                route = mongo.db.routes.find_one({'_id': route_id})
+        
+        bus = None
+        bus_id = trip.get('busId') or trip.get('bus_id')
+        if bus_id:
+            try:
+                bus = mongo.db.buses.find_one({'_id': ObjectId(bus_id)})
+            except:
+                bus = mongo.db.buses.find_one({'_id': bus_id})
         
         # Get all bookings for this trip
-        bookings = list(mongo.db.bookings.find({
-            'schedule_id': trip_id,
-            'status': {'$in': ['confirmed', 'checked_in', 'no_show']}
-        }))
+        query = get_schedule_id_query(trip_id)
+        query['status'] = {'$in': ['confirmed', 'checked_in', 'no_show', 'pending']}
+        bookings = list(mongo.db.bookings.find(query))
         
         passengers = []
         for booking in bookings:
-            user = mongo.db.users.find_one({'_id': ObjectId(booking['user_id'])})
+            # Handle both seat_number and seat_numbers fields
+            seat_numbers = booking.get('seat_numbers') or booking.get('seat_number')
+            if isinstance(seat_numbers, list):
+                seat_display = ', '.join(map(str, seat_numbers))
+            else:
+                seat_display = str(seat_numbers) if seat_numbers else 'N/A'
+            
             passengers.append({
                 '_id': str(booking['_id']),
-                'booking_reference': booking.get('booking_reference'),
+                'booking_reference': booking.get('booking_reference') or booking.get('pnr_number'),
                 'passenger_name': booking.get('passenger_name'),
                 'passenger_phone': booking.get('passenger_phone'),
-                'seat_number': booking.get('seat_number'),
+                'passenger_email': booking.get('passenger_email'),
+                'seat_number': seat_display,
                 'status': booking.get('status'),
                 'checked_in_at': booking.get('checked_in_at'),
                 'baggage_count': booking.get('baggage_count', 0),
                 'special_needs': booking.get('special_needs')
             })
         
+        # Calculate duration
+        duration = calculate_duration(trip.get('departure_time'), trip.get('arrival_time'))
+        
         trip_details = {
             '_id': str(trip['_id']),
-            'departure_date': trip.get('departureDate'),
-            'departure_time': trip.get('departureTime'),
-            'arrival_time': trip.get('arrivalTime'),
+            'departure_date': str(trip.get('departure_date')) if trip.get('departure_date') else None,
+            'departure_time': trip.get('departure_time'),
+            'arrival_time': trip.get('arrival_time'),
             'status': trip.get('status'),
+            'estimated_duration': duration,
             'route': {
-                '_id': str(route['_id']),
-                'origin': route.get('originCity'),
-                'destination': route.get('destinationCity'),
-                'distance': route.get('distanceKm'),
-                'duration': route.get('estimatedDurationHours'),
-                'stops': route.get('stops', [])
-            } if route else None,
+                '_id': str(route['_id']) if route else None,
+                'origin': route.get('origin_city') if route else trip.get('origin_city'),
+                'destination': route.get('destination_city') if route else trip.get('destination_city'),
+                'distance': route.get('distance_km') if route else None,
+                'duration': route.get('estimated_duration_hours') if route else None,
+                'stops': route.get('stops', []) if route else []
+            },
             'bus': {
-                '_id': str(bus['_id']),
-                'number': bus.get('bus_number'),
-                'name': bus.get('bus_name'),
-                'type': bus.get('type'),
-                'total_seats': bus.get('total_seats'),
-                'plate_number': bus.get('plate_number')
-            } if bus else None,
+                '_id': str(bus['_id']) if bus else None,
+                'number': bus.get('bus_number') if bus else trip.get('bus_number'),
+                'name': bus.get('bus_name') if bus else None,
+                'type': bus.get('type') if bus else trip.get('bus_type'),
+                'total_seats': bus.get('total_seats') if bus else trip.get('total_seats', 45),
+                'plate_number': bus.get('plate_number') if bus else trip.get('plate_number')
+            },
             'passengers': passengers,
             'stats': {
-                'total_passengers': len(passengers),
-                'checked_in': len([p for p in passengers if p['status'] == 'checked_in']),
+                'total': len(passengers),
+                'checkedIn': len([p for p in passengers if p['status'] == 'checked_in']),
                 'pending': len([p for p in passengers if p['status'] == 'confirmed']),
-                'no_show': len([p for p in passengers if p['status'] == 'no_show'])
+                'noShow': len([p for p in passengers if p['status'] == 'no_show'])
             }
         }
         
         return jsonify(trip_details), 200
         
     except Exception as e:
+        print(f"❌ Get trip details error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @driver_app_bp.route('/trips/<trip_id>/passengers', methods=['GET'])
@@ -593,23 +738,33 @@ def get_trip_passengers(trip_id):
         if not trip or trip.get('driver_id') != str(driver['_id']):
             return jsonify({'error': 'Trip not found or unauthorized'}), 404
         
-        bookings = list(mongo.db.bookings.find({
-            'schedule_id': trip_id,
-            'status': {'$in': ['confirmed', 'checked_in', 'no_show']}
-        }).sort('seat_number', 1))
+        # Query bookings by both string and ObjectId formats
+        query = get_schedule_id_query(trip_id)
+        query['status'] = {'$in': ['confirmed', 'checked_in', 'no_show', 'pending']}
+        bookings = list(mongo.db.bookings.find(query).sort('seat_numbers', 1))
         
         passengers = []
         for booking in bookings:
+            # Handle both seat_number and seat_numbers fields
+            seat_numbers = booking.get('seat_numbers') or booking.get('seat_number')
+            if isinstance(seat_numbers, list):
+                seat_display = ', '.join(map(str, seat_numbers))
+            else:
+                seat_display = str(seat_numbers) if seat_numbers else 'N/A'
+            
             passengers.append({
                 '_id': str(booking['_id']),
-                'booking_reference': booking.get('booking_reference'),
+                'booking_reference': booking.get('booking_reference') or booking.get('pnr_number'),
                 'passenger_name': booking.get('passenger_name'),
                 'passenger_phone': booking.get('passenger_phone'),
                 'passenger_email': booking.get('passenger_email'),
-                'seat_number': booking.get('seat_number'),
+                'seat_number': seat_display,
+                'seat_numbers': seat_numbers,
                 'status': booking.get('status'),
                 'checked_in_at': booking.get('checked_in_at'),
                 'baggage_count': booking.get('baggage_count', 0),
+                'baggage_weight': booking.get('baggage_weight', 0),
+                'has_baggage': booking.get('has_baggage', False),
                 'special_needs': booking.get('special_needs'),
                 'emergency_contact': booking.get('emergency_contact')
             })
@@ -781,7 +936,7 @@ def start_trip(trip_id):
             }), 400
         
         # Validate time window - can start up to 3 hours before departure
-        departure_date = trip.get('departureDate') or trip.get('departure_date')
+        departure_date = trip.get('departure_date') or trip.get('departure_date')
         departure_time = trip.get('departure_time', '00:00')
         
         if departure_date:
@@ -866,7 +1021,7 @@ def can_start_trip(trip_id):
             }), 200
         
         # Check time window
-        departure_date = trip.get('departureDate') or trip.get('departure_date')
+        departure_date = trip.get('departure_date') or trip.get('departure_date')
         departure_time = trip.get('departure_time', '00:00')
         
         if departure_date:
@@ -968,10 +1123,10 @@ def get_driver_schedules():
         schedules = list(mongo.db.busschedules.find({
             'driver_id': str(driver['_id']),
             '$or': [
-                {'departureDate': {'$gte': start_date, '$lte': end_date}},
+                {'departure_date': {'$gte': start_date, '$lte': end_date}},
                 {'departure_date': {'$gte': start_date.strftime('%Y-%m-%d'), '$lte': end_date.strftime('%Y-%m-%d')}}
             ]
-        }).sort([('departure_date', 1), ('departureDate', 1)]))
+        }).sort([('departure_date', 1), ('departure_date', 1)]))
         
         enriched_schedules = []
         for schedule in schedules:
@@ -994,30 +1149,45 @@ def get_driver_schedules():
                     bus = mongo.db.buses.find_one({'_id': bus_id})
             
             # Get booked seats count
-            booked_seats = mongo.db.bookings.count_documents({
-                'schedule_id': str(schedule['_id']),
-                'status': {'$in': ['confirmed', 'checked_in']}
-            })
+            query = get_schedule_id_query(str(schedule['_id']))
+            query['status'] = {'$in': ['confirmed', 'checked_in', 'pending']}
+            booked_seats = mongo.db.bookings.count_documents(query)
+            
+            # Get origin and destination from route or schedule
+            origin_city = None
+            destination_city = None
+            
+            if route:
+                origin_city = route.get('origin_city')
+                destination_city = route.get('destination_city')
+            else:
+                # Fallback to schedule fields
+                origin_city = schedule.get('origin_city')
+                destination_city = schedule.get('destination_city')
+            
+            # Calculate duration
+            duration = calculate_duration(schedule.get('departure_time'), schedule.get('arrival_time'))
             
             enriched_schedules.append({
                 '_id': str(schedule['_id']),
-                'departure_date': schedule.get('departure_date') or schedule.get('departureDate'),
-                'departure_time': schedule.get('departure_time') or schedule.get('departureTime'),
-                'arrival_time': schedule.get('arrival_time') or schedule.get('arrivalTime'),
+                'departure_date': schedule.get('departure_date'),
+                'departure_time': schedule.get('departure_time'),
+                'arrival_time': schedule.get('arrival_time'),
                 'status': schedule.get('status', 'scheduled'),
                 'booked_seats': booked_seats,
-                'total_seats': schedule.get('total_seats') or schedule.get('totalSeats') or (bus.get('capacity') if bus else 45),
+                'total_seats': schedule.get('total_seats') or (bus.get('capacity') if bus else 45),
+                'origin_city': origin_city,
+                'destination_city': destination_city,
+                'estimated_duration': duration,
                 'route': {
-                    'origin': route.get('originCity') if route else None,
-                    'destination': route.get('destinationCity') if route else None,
-                    'originCity': route.get('originCity') if route else None,
-                    'destinationCity': route.get('destinationCity') if route else None
-                } if route else None,
+                    'origin': origin_city,
+                    'destination': destination_city
+                },
                 'bus': {
                     'plate_number': bus.get('plate_number') if bus else schedule.get('plate_number'),
-                    'bus_number': bus.get('bus_number') if bus else None,
-                    'capacity': bus.get('capacity') if bus else None
-                } if bus else {'plate_number': schedule.get('plate_number')}
+                    'bus_number': bus.get('bus_number') if bus else schedule.get('bus_number'),
+                    'capacity': bus.get('capacity') if bus else schedule.get('total_seats', 45)
+                }
             })
         
         return jsonify({'schedules': enriched_schedules}), 200

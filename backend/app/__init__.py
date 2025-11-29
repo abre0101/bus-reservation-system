@@ -107,7 +107,9 @@ def create_app():
             ('ticket_bp', 'tickets', '/tickets'),
             ('ticketer_bp', 'ticketer', '/api/ticketer'),
             ('tracking_bp', 'tracking', '/tracking'),  # NEW: Bus tracking
-            ('settings_bp', 'settings', '/settings')  # NEW: System settings
+            ('settings_bp', 'settings', '/settings'),  # NEW: System settings
+            ('tariff_bp', 'tariff', '/tariff'),  # NEW: Tariff management
+            ('emergency_bp', 'emergency_cancel', '/admin')  # NEW: Emergency cancellation
         ]
         
         registered_count = 0

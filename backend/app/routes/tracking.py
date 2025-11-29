@@ -90,16 +90,43 @@ def get_my_route_stops():
         if schedule.get('driver_id') != current_user:
             return jsonify({'error': 'You are not assigned to this schedule'}), 403
         
-        # Get route to fetch stops
-        route_id = schedule.get('routeId') or schedule.get('route_id')
+        # Get route to fetch stops - handle multiple field name variations
+        route_id = schedule.get('route_id') or schedule.get('routeId') or schedule.get('route')
         route = None
+        
+        logger.info(f"🔍 DEBUG - Schedule fields: {list(schedule.keys())}")
+        logger.info(f"🔍 DEBUG - Looking for route with ID: {route_id} (type: {type(route_id)})")
+        
         if route_id:
             try:
                 # Try to find route by ObjectId
                 route = mongo.db.routes.find_one({'_id': ObjectId(route_id)})
-            except:
+                if route:
+                    logger.info(f"✅ Found route by ObjectId: {route.get('name')}")
+            except Exception as e:
+                logger.info(f"⚠️ Could not find route by ObjectId: {e}")
                 # If that fails, try as string
-                route = mongo.db.routes.find_one({'_id': route_id})
+                try:
+                    route = mongo.db.routes.find_one({'_id': route_id})
+                    if route:
+                        logger.info(f"✅ Found route by string ID: {route.get('name')}")
+                except Exception as e2:
+                    logger.info(f"⚠️ Could not find route by string ID: {e2}")
+        
+        # If no route_id in schedule, try to find route by matching origin and destination
+        if not route and schedule.get('origin_city') and schedule.get('destination_city'):
+            logger.info(f"🔍 DEBUG - Trying to find route by cities: {schedule.get('origin_city')} -> {schedule.get('destination_city')}")
+            route = mongo.db.routes.find_one({
+                'origin_city': schedule.get('origin_city'),
+                'destination_city': schedule.get('destination_city')
+            })
+            if route:
+                logger.info(f"✅ Found route by city match: {route.get('name')}")
+                route_id = str(route['_id'])
+        
+        if not route:
+            logger.warning(f"❌ Route not found for schedule {schedule_id}. Route ID was: {route_id}")
+            logger.warning(f"   Schedule origin: {schedule.get('origin_city')}, destination: {schedule.get('destination_city')}")
         
         # Get stops from route document (stored as array in route)
         intermediate_stops = route.get('stops', []) if route else []
@@ -113,8 +140,14 @@ def get_my_route_stops():
         logger.info(f"🔍 DEBUG - Route ID from schedule: {route_id}")
         logger.info(f"🔍 DEBUG - Route found: {route is not None}")
         if route:
+            logger.info(f"🔍 DEBUG - Route _id: {route.get('_id')}")
             logger.info(f"🔍 DEBUG - Route name: {route.get('name')}")
-            logger.info(f"🔍 DEBUG - Route stops: {route.get('stops', [])}")
+            logger.info(f"🔍 DEBUG - Route origin: {route.get('origin_city')}")
+            logger.info(f"🔍 DEBUG - Route destination: {route.get('destination_city')}")
+            logger.info(f"🔍 DEBUG - Route stops field: {route.get('stops', [])}")
+            logger.info(f"🔍 DEBUG - Route stops type: {type(route.get('stops', []))}")
+        else:
+            logger.warning(f"❌ No route found - cannot fetch stops")
         logger.info(f"🔍 DEBUG - Total intermediate stops: {len(bus_stops)}")
         logger.info(f"🔍 DEBUG - Stops list: {bus_stops}")
         
@@ -145,7 +178,10 @@ def get_my_route_stops():
                 'stop_name': stop_name,
                 'stop_order': stop_order,
                 'location': location,
-                'estimated_arrival_minutes': estimated_arrival
+                'estimated_arrival_minutes': estimated_arrival,
+                # Add distance information if available
+                'distance_from_origin': stop.get('distance_from_origin', 0) if isinstance(stop, dict) else 0,
+                'distance_to_destination': stop.get('distance_to_destination', 0) if isinstance(stop, dict) else 0
             }
             
             # Check if this stop is checked
@@ -288,13 +324,24 @@ def update_bus_location():
             stop_order = bus_stop.get('stop_order')
         else:
             # Not in busstops collection, get from route stops
-            route_id = schedule.get('routeId') or schedule.get('route_id')
+            route_id = schedule.get('route_id') or schedule.get('routeId')
             route = None
             if route_id:
                 try:
                     route = mongo.db.routes.find_one({'_id': ObjectId(route_id)})
                 except:
                     route = mongo.db.routes.find_one({'_id': route_id})
+            
+            # If no route_id, try to find by cities
+            if not route and schedule.get('origin_city') and schedule.get('destination_city'):
+                logger.info(f"🔍 Check-in DEBUG - Trying to find route by cities: {schedule.get('origin_city')} -> {schedule.get('destination_city')}")
+                route = mongo.db.routes.find_one({
+                    'origin_city': schedule.get('origin_city'),
+                    'destination_city': schedule.get('destination_city')
+                })
+                if route:
+                    logger.info(f"✅ Check-in DEBUG - Found route by city match: {route.get('name')}")
+                    route_id = str(route['_id'])
             
             logger.info(f"🔍 Check-in DEBUG - Route ID: {route_id}, Route found: {route is not None}")
             
@@ -325,7 +372,32 @@ def update_bus_location():
             logger.error(f"❌ Check-in ERROR - Bus stop not found: {bus_stop_id}")
             return jsonify({'error': f'Bus stop not found: {bus_stop_id}'}), 404
         
-        # Create check-in record
+        # Calculate distance information
+        distance_from_origin = 0
+        distance_to_destination = 0
+        total_route_distance = 0
+        
+        # Get route to calculate distances
+        route_id = schedule.get('route_id') or schedule.get('routeId')
+        if route_id:
+            try:
+                route = mongo.db.routes.find_one({'_id': ObjectId(route_id)})
+            except:
+                route = mongo.db.routes.find_one({'_id': route_id})
+            
+            if route:
+                total_route_distance = route.get('distance_km', 0)
+                stops = route.get('stops', [])
+                
+                # Find the current stop in the route stops
+                for stop in stops:
+                    if isinstance(stop, dict):
+                        if stop.get('name') == stop_name or stop.get('order') == stop_order:
+                            distance_from_origin = stop.get('distance_from_origin', 0)
+                            distance_to_destination = stop.get('distance_to_destination', 0)
+                            break
+        
+        # Create check-in record with distance information
         checkin_data = {
             'schedule_id': schedule_id,
             'driver_id': current_user,
@@ -339,7 +411,12 @@ def update_bus_location():
             'passengers_alighted': data.get('passengers_alighted', 0),
             'notes': data.get('notes', ''),
             'status': 'checked_in',
-            'timestamp': datetime.utcnow()
+            'timestamp': datetime.utcnow(),
+            # Distance tracking
+            'distance_from_origin_km': distance_from_origin,
+            'distance_to_destination_km': distance_to_destination,
+            'total_route_distance_km': total_route_distance,
+            'progress_percentage': round((distance_from_origin / total_route_distance * 100), 2) if total_route_distance > 0 else 0
         }
         
         # Determine if this is the final stop
@@ -423,7 +500,12 @@ def update_bus_location():
             'is_final_stop': is_final_stop,
             'schedule_completed': is_final_stop,
             'next_stop_order': stop_order + 1 if not is_final_stop else None,
-            'total_stops': total_stops
+            'total_stops': total_stops,
+            # Distance information
+            'distance_traveled_km': distance_from_origin,
+            'distance_remaining_km': distance_to_destination,
+            'total_distance_km': total_route_distance,
+            'progress_percentage': round((distance_from_origin / total_route_distance * 100), 2) if total_route_distance > 0 else 0
         }), 200
         
     except Exception as e:
@@ -473,14 +555,27 @@ def get_active_buses():
         if not user or user.get('role') not in ['operator', 'admin']:
             return jsonify({'error': 'Operator access required'}), 403
         
-        # Get active schedules (today and ongoing)
+        # Get active schedules (today and upcoming)
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        tomorrow = today + timedelta(days=1)
+        today_str = today.strftime('%Y-%m-%d')
         
+        # Query for both string and datetime formats, show all upcoming schedules
         active_schedules = list(mongo.db.busschedules.find({
-            'departureDate': {'$gte': today, '$lt': tomorrow},
-            'status': {'$in': ['scheduled', 'boarding', 'active', 'departed', 'completed']}
-        }).sort('departureDate', 1))
+            '$or': [
+                # String format (most common)
+                {
+                    'departure_date': {'$gte': today_str},
+                    'status': {'$in': ['scheduled', 'boarding', 'active', 'departed']}
+                },
+                # Datetime format (legacy)
+                {
+                    'departure_date': {'$gte': today},
+                    'status': {'$in': ['scheduled', 'boarding', 'active', 'departed']}
+                }
+            ]
+        }).sort('departure_date', 1))
+        
+        print(f"🚌 Found {len(active_schedules)} active/upcoming schedules")
         
         # Enrich with tracking data based on checked stops
         buses_with_tracking = []
@@ -519,24 +614,30 @@ def get_active_buses():
             if not bus_data.get('bus_number'):
                 bus_data['bus_number'] = bus_data.get('vehicle_number') or bus_data.get('bus_no') or 'N/A'
             
-            # Fetch driver information from users collection
-            driver_id = schedule.get('driver_id')
-            if driver_id:
-                try:
-                    driver = mongo.db.users.find_one({'_id': ObjectId(driver_id)})
-                    if driver:
-                        bus_data['driver_name'] = driver.get('full_name') or driver.get('name') or 'Unknown Driver'
-                        bus_data['driver_phone'] = driver.get('phone') or driver.get('phone_number') or None
-                    else:
+            # Fetch driver information - handle both direct driver_name and driver_id reference
+            # First check if driver_name is already in schedule (direct storage)
+            if schedule.get('driver_name'):
+                bus_data['driver_name'] = schedule.get('driver_name')
+                bus_data['driver_phone'] = schedule.get('driver_phone') or None
+            else:
+                # Otherwise, try to fetch from users collection using driver_id
+                driver_id = schedule.get('driver_id')
+                if driver_id:
+                    try:
+                        driver = mongo.db.users.find_one({'_id': ObjectId(driver_id)})
+                        if driver:
+                            bus_data['driver_name'] = driver.get('full_name') or driver.get('name') or 'Unknown Driver'
+                            bus_data['driver_phone'] = driver.get('phone') or driver.get('phone_number') or None
+                        else:
+                            bus_data['driver_name'] = 'Not assigned'
+                            bus_data['driver_phone'] = None
+                    except Exception as e:
+                        logger.error(f"Error fetching driver info: {e}")
                         bus_data['driver_name'] = 'Not assigned'
                         bus_data['driver_phone'] = None
-                except Exception as e:
-                    logger.error(f"Error fetching driver info: {e}")
+                else:
                     bus_data['driver_name'] = 'Not assigned'
                     bus_data['driver_phone'] = None
-            else:
-                bus_data['driver_name'] = 'Not assigned'
-                bus_data['driver_phone'] = None
             
             # Ensure departure time is set
             if not bus_data.get('departure_time'):
@@ -789,8 +890,8 @@ def create_default_stops_for_route(route_id):
         if not route:
             return jsonify({'error': 'Route not found'}), 404
         
-        origin = route.get('originCity', 'Origin')
-        destination = route.get('destinationCity', 'Destination')
+        origin = route.get('origin_city', 'Origin')
+        destination = route.get('destination_city', 'Destination')
         
         # Check if stops already exist
         existing_stops = mongo.db.busstops.count_documents({'route_id': route_id})
@@ -887,10 +988,10 @@ def get_routes_without_stops():
             if stop_count == 0:
                 routes_without_stops.append({
                     '_id': route_id,
-                    'origin': route.get('originCity'),
-                    'destination': route.get('destinationCity'),
-                    'distance': route.get('distanceKm'),
-                    'duration': route.get('estimatedDurationHours')
+                    'origin': route.get('origin_city'),
+                    'destination': route.get('destination_city'),
+                    'distance': route.get('distance_km'),
+                    'duration': route.get('estimated_duration_hours')
                 })
         
         return jsonify({
@@ -922,8 +1023,8 @@ def create_default_stops_for_schedule(schedule_id):
         if not schedule:
             return jsonify({'error': 'Schedule not found'}), 404
         
-        origin = schedule.get('originCity') or schedule.get('departure_city') or 'Origin'
-        destination = schedule.get('destinationCity') or schedule.get('arrival_city') or 'Destination'
+        origin = schedule.get('origin_city') or schedule.get('departure_city') or 'Origin'
+        destination = schedule.get('destination_city') or schedule.get('arrival_city') or 'Destination'
         route_id = schedule.get('routeId') or schedule_id
         
         # Check if stops already exist

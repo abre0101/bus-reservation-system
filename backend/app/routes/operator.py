@@ -19,6 +19,16 @@ def is_operator_or_admin():
         logger.error(f"Role check error: {e}")
         return False
 
+def is_admin():
+    """Check if current user is admin"""
+    try:
+        current_user_id = get_jwt_identity()
+        user = mongo.db.users.find_one({'_id': ObjectId(current_user_id)})
+        return user and user.get('role') == 'admin'
+    except Exception as e:
+        logger.error(f"Admin check error: {e}")
+        return False
+
 def get_current_user_data():
     """Get current user data"""
     try:
@@ -421,44 +431,89 @@ def cancel_booking(booking_id):
 @operator_bp.route('/checkin/pending', methods=['GET'])
 @jwt_required()
 def get_pending_checkins():
-    """Get pending check-ins for TODAY'S TRAVEL DATE"""
+    """Get pending check-ins for UPCOMING TRAVEL DATES (next 7 days)"""
     try:
         if not is_operator_or_admin():
             return jsonify({'error': 'Operator access required'}), 403
         
-        today_str = datetime.now().strftime('%Y-%m-%d')
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_str = today.strftime('%Y-%m-%d')
+        next_week = today + timedelta(days=7)
+        next_week_str = next_week.strftime('%Y-%m-%d')
         
-        print(f"🔍 Looking for pending checkins for travel date: {today_str}")
+        print(f"🔍 Looking for pending checkins for travel dates: {today_str} to {next_week_str}")
         
-        # Use travel_date instead of created_at
+        # Get bookings for the next 7 days
         pending_checkins = list(mongo.db.bookings.find({
-            'travel_date': today_str,
-            'status': {'$in': ['confirmed', 'pending']}
-        }).sort('departure_time', 1))
+            'travel_date': {
+                '$gte': today_str,
+                '$lte': next_week_str
+            },
+            'status': {'$in': ['confirmed', 'pending']},
+            'check_in_status': {'$ne': 'checked_in'}  # Exclude already checked in
+        }).sort([('travel_date', 1), ('departure_time', 1)]))
         
-        print(f"✅ Found {len(pending_checkins)} pending checkins for today")
+        print(f"✅ Found {len(pending_checkins)} pending checkins for next 7 days")
         
         formatted_checkins = []
         for checkin in pending_checkins:
+            # Calculate check-in availability
+            travel_date_str = checkin.get('travel_date', '')
+            departure_time = checkin.get('departure_time', '')
+            
+            checkin_availability = 'available'
+            checkin_message = '✓ Ready to check in'
+            
+            try:
+                if travel_date_str and departure_time:
+                    travel_datetime = datetime.strptime(f"{travel_date_str} {departure_time}", '%Y-%m-%d %H:%M')
+                    now = datetime.now()
+                    time_until_departure = travel_datetime - now
+                    hours_until = time_until_departure.total_seconds() / 3600
+                    
+                    if hours_until > 24:
+                        checkin_availability = 'too_early'
+                        days = int(hours_until / 24)
+                        remaining_hours = int(hours_until % 24)
+                        checkin_message = f'Opens in {days}d {remaining_hours}h'
+                    elif hours_until < 0:
+                        checkin_availability = 'departed'
+                        checkin_message = '⚠️ Bus has departed'
+                    else:
+                        checkin_message = f'Departs in {int(hours_until)}h {int((hours_until % 1) * 60)}m'
+            except Exception as e:
+                print(f"Error calculating check-in time: {e}")
+            
             formatted_checkins.append({
+                '_id': str(checkin['_id']),
                 'booking_id': str(checkin['_id']),
                 'pnr_number': checkin.get('pnr_number', ''),
                 'passenger_name': checkin.get('passenger_name', ''),
                 'passenger_phone': checkin.get('passenger_phone', ''),
-                'seat_number': ', '.join(checkin.get('seat_numbers', [])),
-                'route': f"{checkin.get('departure_city', 'Unknown')} to {checkin.get('arrival_city', 'Unknown')}",
-                'departure_time': checkin.get('departure_time', ''),
-                'travel_date': checkin.get('travel_date', ''),
+                'seat_numbers': checkin.get('seat_numbers', []),
+                'departure_city': checkin.get('departure_city', 'Unknown'),
+                'arrival_city': checkin.get('arrival_city', 'Unknown'),
+                'departure_time': departure_time,
+                'travel_date': travel_date_str,
+                'bus_number': checkin.get('bus_number', 'N/A'),
+                'payment_status': checkin.get('payment_status', 'pending'),
+                'status': checkin.get('status', 'confirmed'),
+                'check_in_status': checkin.get('check_in_status', 'pending'),
+                'checkin_availability': checkin_availability,
+                'checkin_message': checkin_message,
                 'has_baggage': checkin.get('has_baggage', False),
                 'baggage_weight': checkin.get('baggage_weight', 0),
-                'status': checkin.get('status', 'confirmed'),
                 'created_at': checkin.get('created_at', '').isoformat() if isinstance(checkin.get('created_at'), datetime) else ''
             })
         
         return jsonify({
             'success': True,
-            'pending_checkins': formatted_checkins,
-            'travel_date': today_str
+            'bookings': formatted_checkins,  # Changed from 'pending_checkins' to 'bookings' to match frontend
+            'total': len(formatted_checkins),
+            'date_range': {
+                'start': today_str,
+                'end': next_week_str
+            }
         }), 200
         
     except Exception as e:
@@ -734,12 +789,30 @@ def get_operator_dashboard_stats():
         # Active Trips = Scheduled + Boarding + Departed + Active
         # On Route Trips = Departed + Active (subset of Active Trips)
         
+        # Handle both string and datetime formats for departure_date
+        start_date_str = start_date.strftime('%Y-%m-%d')
+        end_date_str = end_date.strftime('%Y-%m-%d')
+        
         schedule_date_filter = {
-            'departureDate': {
-                '$gte': start_date,
-                '$lt': end_date
-            }
+            '$or': [
+                # String format (most common)
+                {
+                    'departure_date': {
+                        '$gte': start_date_str,
+                        '$lt': end_date_str
+                    }
+                },
+                # Datetime format (legacy)
+                {
+                    'departure_date': {
+                        '$gte': start_date,
+                        '$lt': end_date
+                    }
+                }
+            ]
         }
+        
+        print(f"🔍 Schedule date filter: {schedule_date_filter}")
         
         # Count trips by status
         scheduled_trips = mongo.db.busschedules.count_documents({
@@ -790,7 +863,7 @@ def get_operator_dashboard_stats():
         prev_start, prev_end = calculate_previous_period(start_date, end_date, timeframe)
         
         prev_active_trips = mongo.db.busschedules.count_documents({
-            'departureDate': {'$gte': prev_start, '$lt': prev_end},
+            'departure_date': {'$gte': prev_start, '$lt': prev_end},
             'status': {'$in': ['scheduled', 'boarding', 'active', 'departed']}
         })
         
@@ -886,7 +959,7 @@ def get_recent_trips():
         # Get recent schedules (upcoming and active)
         schedules = list(mongo.db.busschedules.find({
             'status': {'$in': ['scheduled', 'boarding', 'active', 'departed']}
-        }).sort('departureDate', 1).limit(limit))
+        }).sort('departure_date', 1).limit(limit))
         
         trips = []
         for schedule in schedules:
@@ -1024,7 +1097,7 @@ def get_dashboard_charts():
                 
                 # Occupancy for this day
                 day_schedules = list(mongo.db.busschedules.find({
-                    'departureDate': {'$gte': day_start, '$lt': day_end}
+                    'departure_date': {'$gte': day_start, '$lt': day_end}
                 }))
                 
                 total_seats = sum(s.get('total_seats', 45) for s in day_schedules)
@@ -1116,7 +1189,7 @@ def get_schedules():
             
             print(f"📅 Filtering schedules by timeframe: {timeframe} ({start_date} to {end_date})")
             
-            query['departureDate'] = {
+            query['departure_date'] = {
                 '$gte': start_date,
                 '$lt': end_date
             }
@@ -1126,12 +1199,12 @@ def get_schedules():
                 search_date = datetime.strptime(date, '%Y-%m-%d')
                 start_date = search_date.replace(hour=0, minute=0, second=0, microsecond=0)
                 end_date = start_date + timedelta(days=1)
-                query['departureDate'] = {'$gte': start_date, '$lt': end_date}
+                query['departure_date'] = {'$gte': start_date, '$lt': end_date}
             except ValueError:
                 return jsonify({'error': 'Invalid date format'}), 400
         
         print(f"📋 Schedules query: {query}")
-        schedules = list(mongo.db.busschedules.find(query).sort('departureDate', 1))
+        schedules = list(mongo.db.busschedules.find(query).sort('departure_date', 1))
         print(f"📊 Found {len(schedules)} schedules")
         
         enriched_schedules = []
@@ -1163,7 +1236,7 @@ def get_schedules():
                 'route_name': route_name,
                 'bus_number': bus_number,
                 'driver_name': schedule.get('driver_name', 'Not assigned'),
-                'departure_date': schedule.get('departure_date', schedule.get('departureDate', '').strftime('%Y-%m-%d') if isinstance(schedule.get('departureDate'), datetime) else ''),
+                'departure_date': schedule.get('departure_date', schedule.get('departure_date', '').strftime('%Y-%m-%d') if isinstance(schedule.get('departure_date'), datetime) else ''),
                 'departure_time': schedule.get('departure_time', schedule.get('departureTime', '')),
                 'arrival_time': schedule.get('arrivalTime', ''),
                 'status': schedule.get('status', 'scheduled'),
@@ -1190,6 +1263,111 @@ def get_schedules():
     except Exception as e:
         logger.error(f"Get schedules error: {e}")
         return jsonify({'error': f'Failed to fetch schedules: {str(e)}'}), 500
+
+# ==================== ROUTES MANAGEMENT ====================
+
+@operator_bp.route('/routes', methods=['GET'])
+@jwt_required()
+def get_routes():
+    """Get all routes for operator"""
+    try:
+        if not is_operator_or_admin():
+            return jsonify({'error': 'Operator access required'}), 403
+        
+        print("📋 Fetching all routes for operator")
+        
+        routes = list(mongo.db.routes.find({'status': {'$ne': 'inactive'}}))
+        
+        formatted_routes = []
+        for route in routes:
+            # Support both distance_km and distance field names
+            distance = route.get('distance_km') or route.get('distance', 0)
+            
+            formatted_routes.append({
+                '_id': str(route['_id']),
+                'name': route.get('name', ''),
+                'origin_city': route.get('originCity') or route.get('origin_city', ''),
+                'destination_city': route.get('destinationCity') or route.get('destination_city', ''),
+                'originCity': route.get('originCity') or route.get('origin_city', ''),
+                'destinationCity': route.get('destinationCity') or route.get('destination_city', ''),
+                'distance': distance,
+                'distance_km': distance,
+                'duration': route.get('estimated_duration_hours') or route.get('duration', 0),
+                'fare': route.get('base_fare_birr') or route.get('fare', 0),
+                'base_fare': route.get('base_fare_birr') or route.get('base_fare') or route.get('fare', 0),
+                'status': route.get('status', 'active')
+            })
+        
+        print(f"✅ Found {len(formatted_routes)} routes")
+        
+        return jsonify({
+            'success': True,
+            'routes': formatted_routes,
+            'total': len(formatted_routes)
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Get routes error: {e}")
+        return jsonify({'error': f'Failed to fetch routes: {str(e)}'}), 500
+
+
+# ==================== BUSES MANAGEMENT ====================
+
+@operator_bp.route('/buses', methods=['GET'])
+@jwt_required()
+def get_buses():
+    """Get all buses for operator (only active buses, excluding maintenance and inactive)"""
+    try:
+        if not is_operator_or_admin():
+            return jsonify({'error': 'Operator access required'}), 403
+        
+        print("📋 Fetching available buses for operator")
+        
+        # Get all buses first
+        all_buses = list(mongo.db.buses.find({}))
+        print(f"🔍 Total buses in database: {len(all_buses)}")
+        
+        formatted_buses = []
+        for bus in all_buses:
+            bus_status = (bus.get('status') or 'active').lower().strip()
+            bus_number = bus.get('bus_number', 'Unknown')
+            
+            print(f"🚌 Bus {bus_number}: status = '{bus_status}'")
+            
+            # Skip buses that are not available for scheduling
+            if bus_status in ['inactive', 'maintenance', 'under_maintenance', 'retired', 'out_of_service']:
+                print(f"   ❌ Skipping bus {bus_number} - status: {bus_status}")
+                continue
+            
+            print(f"   ✅ Including bus {bus_number}")
+            
+            formatted_buses.append({
+                '_id': str(bus['_id']),
+                'bus_number': bus.get('bus_number', ''),
+                'bus_name': bus.get('bus_name', ''),
+                'bus_type': bus.get('bus_type') or bus.get('type', 'Standard'),
+                'type': bus.get('type') or bus.get('bus_type', 'Standard'),
+                'capacity': bus.get('capacity', 45),
+                'total_seats': bus.get('total_seats') or bus.get('capacity', 45),
+                'plate_number': bus.get('plate_number', ''),
+                'status': bus.get('status', 'active'),
+                'manufacturer': bus.get('manufacturer', ''),
+                'model': bus.get('model', ''),
+                'year': bus.get('year', '')
+            })
+        
+        print(f"✅ Found {len(formatted_buses)} available buses (excluding maintenance/inactive)")
+        
+        return jsonify({
+            'success': True,
+            'buses': formatted_buses,
+            'total': len(formatted_buses)
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Get buses error: {e}")
+        return jsonify({'error': f'Failed to fetch buses: {str(e)}'}), 500
+
 
 # ==================== DRIVER MANAGEMENT ====================
 
@@ -1273,6 +1451,129 @@ def get_system_status():
 
 # ==================== SCHEDULE MANAGEMENT ENDPOINTS ====================
 
+def check_driver_conflict(driver_name, departure_date, schedule_id=None):
+    """Check if driver is already assigned to another schedule on the same day"""
+    if not driver_name or not driver_name.strip():
+        return None  # No driver assigned, no conflict
+    
+    try:
+        # Parse the departure date to get the day
+        if isinstance(departure_date, str):
+            date_obj = datetime.strptime(departure_date.split('T')[0], '%Y-%m-%d')
+        else:
+            date_obj = departure_date
+        
+        # Get start and end of the day
+        start_of_day = date_obj.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_day = date_obj.replace(hour=23, minute=59, second=59, microsecond=999999)
+        
+        # Build query to find schedules with same driver on same day
+        query = {
+            'driver_name': driver_name.strip(),
+            'departure_date': {
+                '$gte': start_of_day,
+                '$lte': end_of_day
+            },
+            'status': {'$nin': ['cancelled', 'completed']}  # Exclude cancelled/completed schedules
+        }
+        
+        # If updating, exclude the current schedule
+        if schedule_id:
+            query['_id'] = {'$ne': ObjectId(schedule_id)}
+        
+        # Check for conflicts
+        conflicting_schedules = list(mongo.db.busschedules.find(query))
+        
+        if conflicting_schedules:
+            conflict_details = []
+            for schedule in conflicting_schedules:
+                conflict_details.append({
+                    'schedule_id': str(schedule.get('_id')),
+                    'route': f"{schedule.get('origin_city', 'N/A')} → {schedule.get('destination_city', 'N/A')}",
+                    'departure_time': schedule.get('departure_time', 'N/A'),
+                    'bus_number': schedule.get('bus_number', 'N/A'),
+                    'status': schedule.get('status', 'N/A')
+                })
+            
+            return {
+                'has_conflict': True,
+                'driver_name': driver_name,
+                'date': date_obj.strftime('%Y-%m-%d'),
+                'conflicts': conflict_details
+            }
+        
+        return None  # No conflict
+        
+    except Exception as e:
+        print(f"❌ Error checking driver conflict: {e}")
+        return None
+
+
+@operator_bp.route('/schedules/driver-conflicts', methods=['GET'])
+@jwt_required()
+def get_driver_conflicts():
+    """Get all existing driver conflicts in schedules"""
+    try:
+        if not is_operator_or_admin():
+            return jsonify({'error': 'Operator access required'}), 403
+        
+        print("🔍 Checking for driver conflicts in schedules...")
+        
+        # Get all active schedules (not cancelled or completed)
+        schedules = list(mongo.db.busschedules.find({
+            'status': {'$nin': ['cancelled', 'completed']},
+            'driver_name': {'$exists': True, '$ne': '', '$ne': None}
+        }).sort('departure_date', 1))
+        
+        conflicts = []
+        checked_combinations = set()
+        
+        for schedule in schedules:
+            driver_name = schedule.get('driver_name', '').strip()
+            departure_date = schedule.get('departure_date')
+            schedule_id = str(schedule.get('_id'))
+            
+            if not driver_name or not departure_date:
+                continue
+            
+            # Create a unique key for this driver-date combination
+            date_str = departure_date.strftime('%Y-%m-%d') if isinstance(departure_date, datetime) else str(departure_date).split('T')[0]
+            combo_key = f"{driver_name}_{date_str}"
+            
+            # Skip if we already checked this combination
+            if combo_key in checked_combinations:
+                continue
+            
+            checked_combinations.add(combo_key)
+            
+            # Check for conflicts
+            conflict = check_driver_conflict(driver_name, departure_date, schedule_id)
+            
+            if conflict:
+                # Add the current schedule to the conflict list
+                conflict['conflicts'].insert(0, {
+                    'schedule_id': schedule_id,
+                    'route': f"{schedule.get('origin_city', 'N/A')} → {schedule.get('destination_city', 'N/A')}",
+                    'departure_time': schedule.get('departure_time', 'N/A'),
+                    'bus_number': schedule.get('bus_number', 'N/A'),
+                    'status': schedule.get('status', 'N/A')
+                })
+                
+                conflicts.append(conflict)
+        
+        print(f"✅ Found {len(conflicts)} driver conflicts")
+        
+        return jsonify({
+            'success': True,
+            'conflicts': conflicts,
+            'total': len(conflicts)
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error checking driver conflicts: {e}")
+        return jsonify({'error': f'Failed to check driver conflicts: {str(e)}'}), 500
+
+
 @operator_bp.route('/schedules', methods=['POST'])
 @jwt_required()
 def create_schedule():
@@ -1301,36 +1602,183 @@ def create_schedule():
         except ValueError as e:
             return jsonify({'error': f'Invalid date/time format: {str(e)}'}), 400
         
+        # Validate that departure date is not in the past
+        now = datetime.now()
+        if departure_datetime < now:
+            return jsonify({
+                'error': 'Cannot create schedule for past date/time',
+                'departure_datetime': departure_datetime.strftime('%Y-%m-%d %H:%M'),
+                'current_datetime': now.strftime('%Y-%m-%d %H:%M')
+            }), 400
+        
+        # Check for driver conflicts
+        driver_name = data.get('driver_name', '').strip()
+        if driver_name:
+            conflict = check_driver_conflict(driver_name, departure_datetime)
+            if conflict:
+                conflict_info = conflict['conflicts'][0]
+                return jsonify({
+                    'error': f"Driver '{driver_name}' is already assigned to another schedule on {conflict['date']}",
+                    'conflict_details': {
+                        'driver': driver_name,
+                        'date': conflict['date'],
+                        'existing_schedule': {
+                            'route': conflict_info['route'],
+                            'departure_time': conflict_info['departure_time'],
+                            'bus_number': conflict_info['bus_number']
+                        }
+                    }
+                }), 409  # 409 Conflict status code
+        
+        # VALIDATE FARE AGAINST MAXIMUM TARIFF (Real-world logic)
+        bus_type = data.get('bus_type', 'Standard')
+        fare_birr = float(data['fare_birr'])
+        discount_reason = data.get('discount_reason', '')
+        
+        # Get maximum tariff rate for this bus type
+        tariff_rate = mongo.db.tariff_rates.find_one({
+            'bus_type': bus_type,
+            'is_active': True
+        })
+        
+        if tariff_rate:
+            # Calculate maximum allowed fare based on route distance
+            route_distance = data.get('route_distance', 0)
+            if route_distance > 0:
+                max_fare = max(
+                    route_distance * tariff_rate['rate_per_km'],
+                    tariff_rate['minimum_fare']
+                )
+                
+                # BLOCK if fare exceeds maximum tariff
+                if fare_birr > max_fare:
+                    return jsonify({
+                        'error': 'Fare exceeds maximum government-approved tariff',
+                        'details': {
+                            'your_fare': fare_birr,
+                            'maximum_tariff': round(max_fare, 2),
+                            'bus_type': bus_type,
+                            'rate_per_km': tariff_rate['rate_per_km'],
+                            'distance': route_distance,
+                            'message': f'Maximum allowed fare for {bus_type} bus on {route_distance}km route is {round(max_fare, 2)} ETB'
+                        }
+                    }), 400
+                
+                # WARN if fare is significantly below tariff (>20% discount)
+                discount_percentage = ((max_fare - fare_birr) / max_fare) * 100
+                if discount_percentage > 20 and not discount_reason:
+                    return jsonify({
+                        'error': 'Large discount requires justification',
+                        'details': {
+                            'your_fare': fare_birr,
+                            'maximum_tariff': round(max_fare, 2),
+                            'discount_percentage': round(discount_percentage, 1),
+                            'message': 'Discounts over 20% require a reason. Please provide discount_reason field.'
+                        }
+                    }), 400
+        
         # Calculate arrival time (add 4 hours as default)
         arrival_datetime = departure_datetime + timedelta(hours=4)
         
+        # Validate fare against tariff (if tariff system is active)
+        fare_birr = float(data['fare_birr'])
+        bus_type = data.get('bus_type', 'Standard')
+        discount_reason = data.get('discount_reason', '')
+        
+        # Get current tariff rate for validation
+        tariff_rate = mongo.db.tariff_rates.find_one({
+            'bus_type': bus_type,
+            'is_active': True,
+            'effective_from': {'$lte': now},
+            '$or': [
+                {'effective_until': None},
+                {'effective_until': {'$gte': now}}
+            ]
+        })
+        
+        # Calculate maximum allowed fare based on tariff
+        if tariff_rate:
+            # Get route distance for calculation
+            route = mongo.db.routes.find_one({
+                '$or': [
+                    {'name': data['route_name']},
+                    {
+                        'origin_city': data['origin_city'],
+                        'destination_city': data['destination_city']
+                    }
+                ]
+            })
+            
+            if route:
+                distance = route.get('distance_km') or route.get('distance', 0)
+                if distance > 0:
+                    rate_per_km = tariff_rate.get('rate_per_km', 2.5)
+                    minimum_fare = tariff_rate.get('minimum_fare', 50)
+                    max_tariff = max(round(distance * rate_per_km), minimum_fare)
+                    
+                    # Check if fare exceeds maximum tariff
+                    if fare_birr > max_tariff:
+                        return jsonify({
+                            'error': f'Fare ({fare_birr} ETB) exceeds maximum allowed tariff ({max_tariff} ETB)',
+                            'max_tariff': max_tariff,
+                            'your_fare': fare_birr,
+                            'message': 'Cannot charge more than government-regulated tariff'
+                        }), 400
+                    
+                    # Warn if fare is significantly below tariff (>20% discount)
+                    discount_percentage = ((max_tariff - fare_birr) / max_tariff) * 100
+                    if discount_percentage > 20 and not discount_reason:
+                        return jsonify({
+                            'error': f'Fare is {discount_percentage:.1f}% below tariff. Please provide discount reason.',
+                            'requires_discount_reason': True,
+                            'max_tariff': max_tariff,
+                            'your_fare': fare_birr,
+                            'discount_percentage': round(discount_percentage, 1)
+                        }), 400
+        
         # Create schedule document
+        # Look up driver_id from driver_name if provided
+        driver_id = None
+        driver_name = data.get('driver_name', '').strip()
+        if driver_name:
+            # Try to find the driver by name
+            driver = mongo.db.users.find_one({
+                'role': 'driver',
+                '$or': [
+                    {'full_name': driver_name},
+                    {'name': driver_name}
+                ]
+            })
+            if driver:
+                driver_id = str(driver['_id'])
+                print(f"✅ Found driver_id {driver_id} for driver {driver_name}")
+            else:
+                print(f"⚠️ Driver not found: {driver_name}")
+        
         schedule_data = {
             # Route information
             'route_name': data['route_name'],
             'origin_city': data['origin_city'].strip(),
             'destination_city': data['destination_city'].strip(),
-            'originCity': data['origin_city'].strip(),  # Add for compatibility
-            'destinationCity': data['destination_city'].strip(),  # Add for compatibility
+            'route_distance': data.get('route_distance', 0),
             
             # Bus information
             'bus_number': data['bus_number'],
-            'busNumber': data['bus_number'],  # Add for compatibility
             'bus_type': data.get('bus_type', 'Standard'),
             
             # Driver information
-            'driver_name': data.get('driver_name', ''),
+            'driver_name': driver_name,
+            'driver_id': driver_id,  # ✅ Add driver_id field
             
             # Schedule timing
-            'departureDate': departure_datetime,
-            'departure_date': data['departure_date'],
-            'departureTime': data['departure_time'],
+            'departure_date': departure_datetime,
             'departure_time': data['departure_time'],
-            'arrivalTime': arrival_datetime.strftime('%H:%M'),
+            'arrival_time': arrival_datetime.strftime('%H:%M'),
             
             # Pricing and capacity
             'fareBirr': float(data['fare_birr']),
             'fare_birr': float(data['fare_birr']),
+            'discount_reason': discount_reason,
             'total_seats': int(data.get('total_seats', 45)),
             'available_seats': int(data.get('total_seats', 45)),
             'booked_seats': 0,
@@ -1358,7 +1806,7 @@ def create_schedule():
             'driver_name': schedule_data['driver_name'],
             'departure_date': schedule_data['departure_date'],
             'departure_time': schedule_data['departure_time'],
-            'arrival_time': schedule_data['arrivalTime'],
+            'arrival_time': schedule_data['arrival_time'],
             'status': schedule_data['status'],
             'available_seats': schedule_data['available_seats'],
             'booked_seats': schedule_data['booked_seats'],
@@ -1432,9 +1880,9 @@ def update_schedule(schedule_id):
                 if source_fields in data and data[source_fields]:
                     update_data[db_field] = data[source_fields]
         
-        # Handle date and time updates with multiple field name support
-        departure_date_value = data.get('departure_date') or data.get('departureDate')
-        departure_time_value = data.get('departure_time') or data.get('departureTime')
+        # Handle date and time updates
+        departure_date_value = data.get('departure_date')
+        departure_time_value = data.get('departure_time')
         
         if departure_date_value and departure_time_value:
             try:
@@ -1453,22 +1901,29 @@ def update_schedule(schedule_id):
                     microsecond=0
                 )
                 
+                # Validate that departure date is not in the past
+                now = datetime.now()
+                if departure_datetime < now:
+                    return jsonify({
+                        'error': 'Cannot update schedule to past date/time',
+                        'departure_datetime': departure_datetime.strftime('%Y-%m-%d %H:%M'),
+                        'current_datetime': now.strftime('%Y-%m-%d %H:%M')
+                    }), 400
+                
                 # Update both field formats
-                update_data['departureDate'] = departure_datetime
+                update_data['departure_date'] = departure_datetime
                 update_data['departure_date'] = departure_date_value.split('T')[0]
                 update_data['departureTime'] = departure_time_value
                 update_data['departure_time'] = departure_time_value
                 
                 # Handle arrival time
-                arrival_time_value = data.get('arrivalTime') or data.get('arrival_time')
+                arrival_time_value = data.get('arrival_time')
                 if arrival_time_value:
-                    update_data['arrivalTime'] = arrival_time_value
                     update_data['arrival_time'] = arrival_time_value
                 else:
                     # Calculate arrival time (add 4 hours as default)
                     arrival_datetime = departure_datetime + timedelta(hours=4)
                     arrival_time_str = arrival_datetime.strftime('%H:%M')
-                    update_data['arrivalTime'] = arrival_time_str
                     update_data['arrival_time'] = arrival_time_str
                     
             except (ValueError, IndexError) as e:
@@ -1493,6 +1948,27 @@ def update_schedule(schedule_id):
                 # Clear driver assignment
                 update_data['driver_id'] = None
                 update_data['driver_name'] = ''
+        
+        # Check for driver conflicts before updating
+        driver_name_to_check = update_data.get('driver_name') or data.get('driver_name')
+        departure_date_to_check = update_data.get('departure_date') or schedule.get('departure_date')
+        
+        if driver_name_to_check and driver_name_to_check.strip():
+            conflict = check_driver_conflict(driver_name_to_check, departure_date_to_check, schedule_id)
+            if conflict:
+                conflict_info = conflict['conflicts'][0]
+                return jsonify({
+                    'error': f"Driver '{driver_name_to_check}' is already assigned to another schedule on {conflict['date']}",
+                    'conflict_details': {
+                        'driver': driver_name_to_check,
+                        'date': conflict['date'],
+                        'existing_schedule': {
+                            'route': conflict_info['route'],
+                            'departure_time': conflict_info['departure_time'],
+                            'bus_number': conflict_info['bus_number']
+                        }
+                    }
+                }), 409  # 409 Conflict status code
         
         print(f"📝 Update data: {update_data}")
         
@@ -2049,10 +2525,10 @@ def get_driver_assignments(driver_id):
                     schedule = mongo.db.busschedules.find_one({'_id': schedule_oid})
                     if schedule:
                         enriched_assignment['schedule_details'] = {
-                            'route_name': f"{schedule.get('originCity', 'Unknown')} - {schedule.get('destinationCity', 'Unknown')}",
-                            'departure_date': schedule.get('departureDate', '').strftime('%Y-%m-%d') if isinstance(schedule.get('departureDate'), datetime) else '',
-                            'departure_time': schedule.get('departureTime', ''),
-                            'bus_number': schedule.get('busNumber', 'Unknown'),
+                            'route_name': f"{schedule.get('origin_city', 'Unknown')} - {schedule.get('destination_city', 'Unknown')}",
+                            'departure_date': schedule.get('departure_date', '').strftime('%Y-%m-%d') if isinstance(schedule.get('departure_date'), datetime) else '',
+                            'departure_time': schedule.get('departure_time', ''),
+                            'bus_number': schedule.get('bus_number', 'Unknown'),
                             'status': schedule.get('status', 'scheduled')
                         }
                 except:
@@ -2134,9 +2610,9 @@ def assign_driver_to_schedule():
             'driver_id': driver_id,
             'driver_name': driver.get('name', ''),
             'schedule_id': schedule_id,
-            'route_name': f"{schedule.get('originCity', 'Unknown')} - {schedule.get('destinationCity', 'Unknown')}",
+            'route_name': f"{schedule.get('origin_city', 'Unknown')} - {schedule.get('destination_city', 'Unknown')}",
             'bus_number': schedule.get('busNumber', 'Unknown'),
-            'departure_date': schedule.get('departureDate'),
+            'departure_date': schedule.get('departure_date'),
             'departure_time': schedule.get('departureTime', ''),
             'assigned_date': datetime.now(),
             'assigned_by': get_jwt_identity(),
@@ -2313,10 +2789,10 @@ def get_all_assignments():
                     schedule = mongo.db.busschedules.find_one({'_id': schedule_oid})
                     if schedule:
                         enriched_assignment['schedule_details'] = {
-                            'route_name': f"{schedule.get('originCity', 'Unknown')} - {schedule.get('destinationCity', 'Unknown')}",
-                            'departure_date': schedule.get('departureDate', '').strftime('%Y-%m-%d') if isinstance(schedule.get('departureDate'), datetime) else '',
-                            'departure_time': schedule.get('departureTime', ''),
-                            'bus_number': schedule.get('busNumber', 'Unknown'),
+                            'route_name': f"{schedule.get('origin_city', 'Unknown')} - {schedule.get('destination_city', 'Unknown')}",
+                            'departure_date': schedule.get('departure_date', '').strftime('%Y-%m-%d') if isinstance(schedule.get('departure_date'), datetime) else '',
+                            'departure_time': schedule.get('departure_time', ''),
+                            'bus_number': schedule.get('bus_number', 'Unknown'),
                             'status': schedule.get('status', 'scheduled')
                         }
                 except:
@@ -2720,7 +3196,7 @@ def get_tracking_updates():
         
         # Get schedules for today
         schedules = list(mongo.db.busschedules.find({
-            'departureDate': {'$gte': datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)}
+            'departure_date': {'$gte': datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)}
         }))
         
         # Enrich tracking data with schedule info
@@ -2779,7 +3255,7 @@ def get_live_tracking():
         
         # Get today's schedules
         schedules = list(mongo.db.busschedules.find({
-            'departureDate': {'$gte': today}
+            'departure_date': {'$gte': today}
         }))
         
         live_tracking = []
@@ -2850,6 +3326,7 @@ def get_reports():
         print(f"📅 Report date range: {start_date.date()} to {end_date.date()}")
         
         # Get today's bookings (by CREATED DATE - tickets sold today)
+        # This shows bookings MADE today, regardless of travel date
         # Include ALL bookings (even cancelled) to show accurate sales data
         today_bookings = list(mongo.db.bookings.find({
             '$or': [
@@ -2868,6 +3345,10 @@ def get_reports():
                 }
             ]
         }))
+        
+        print(f"📊 Today's bookings (created {today.date()}): {len(today_bookings)}")
+        if today_bookings:
+            print(f"   Sample: PNR {today_bookings[0].get('pnr_number')}, Travel: {today_bookings[0].get('travel_date')}, Amount: {today_bookings[0].get('total_amount')}")
         
         # Get tomorrow's bookings (by CREATED DATE - tickets sold tomorrow)
         # Include ALL bookings (even cancelled) to show accurate sales data
@@ -2961,7 +3442,7 @@ def get_reports():
                 'status': booking.get('status', 'confirmed')
             })
         
-        # Calculate today's revenue
+        # Calculate today's revenue (EARNED TODAY from bookings made today)
         # For non-cancelled bookings: full amount
         # For cancelled bookings: cancellation fee (40%)
         today_revenue = 0
@@ -2975,6 +3456,9 @@ def get_reports():
         
         # Passenger count excludes cancelled bookings
         today_passenger_count = sum(len(b.get('seat_numbers', [])) for b in today_bookings if b.get('status') != 'cancelled')
+        
+        print(f"💰 Today's revenue (earned today): ETB {today_revenue}")
+        print(f"👥 Today's passengers (non-cancelled): {today_passenger_count}")
         
         # Get weekly stats
         week_start = today - timedelta(days=today.weekday())
@@ -3100,7 +3584,8 @@ def get_reports():
                 'totalTrips': {'$sum': 1},
                 'bookings': {'$sum': 1},
                 'revenue': {'$sum': '$total_amount'},
-                'totalSeats': {'$sum': {'$size': '$seat_numbers'}}
+                'totalSeats': {'$sum': {'$size': '$seat_numbers'}},
+                'bus_name': {'$first': '$bus_name'}  # Get bus name from bookings
             }},
             {'$match': {'_id': {'$ne': None, '$ne': 'N/A', '$exists': True}}},
             {'$sort': {'revenue': -1}},
@@ -3112,6 +3597,18 @@ def get_reports():
         bus_performance = []
         for stat in bus_stats:
             bus_number = stat.get('_id', 'Unknown')
+            bus_name = stat.get('bus_name')
+            
+            # If bus_name not in bookings, try to fetch from buses collection
+            if not bus_name:
+                bus_doc = mongo.db.buses.find_one({'bus_number': bus_number})
+                if bus_doc:
+                    bus_name = bus_doc.get('bus_name') or bus_doc.get('name')
+            
+            # Fallback to bus number if no name found
+            if not bus_name:
+                bus_name = f"Bus {bus_number}"
+            
             total_bookings = stat.get('bookings', 0)
             total_seats = stat.get('totalSeats', 0)
             
@@ -3123,6 +3620,7 @@ def get_reports():
             
             bus_performance.append({
                 'busNumber': bus_number,
+                'busName': bus_name,  # Add bus name
                 'totalTrips': total_trips,
                 'bookings': total_bookings,
                 'revenue': stat.get('revenue', 0),
@@ -3185,3 +3683,364 @@ def get_reports():
         return jsonify({'error': f'Failed to generate reports: {str(e)}'}), 500
 
 
+
+
+# ==================== TARIFF MANAGEMENT (ADMIN ONLY) ====================
+
+@operator_bp.route('/tariff-rates', methods=['GET'])
+@jwt_required()
+def get_tariff_rates():
+    """Get all tariff rates (current and historical)"""
+    try:
+        if not is_operator_or_admin():
+            return jsonify({'error': 'Access denied'}), 403
+        
+        # Get query parameters
+        active_only = request.args.get('active_only', 'true').lower() == 'true'
+        
+        query = {}
+        if active_only:
+            query['is_active'] = True
+            # Also check effective dates
+            now = datetime.now()
+            query['$or'] = [
+                {'effective_until': None},
+                {'effective_until': {'$gte': now}}
+            ]
+        
+        tariff_rates = list(mongo.db.tariff_rates.find(query).sort('bus_type', 1))
+        
+        return jsonify({
+            'success': True,
+            'tariff_rates': serialize_document(tariff_rates),
+            'total': len(tariff_rates)
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Get tariff rates error: {e}")
+        return jsonify({'error': f'Failed to fetch tariff rates: {str(e)}'}), 500
+
+
+@operator_bp.route('/tariff-rates/current', methods=['GET'])
+def get_current_tariff_rates():
+    """Get current active tariff rates (public endpoint for operators and customers)"""
+    try:
+        now = datetime.now()
+        
+        # Get active rates that are currently effective
+        tariff_rates = list(mongo.db.tariff_rates.find({
+            'is_active': True,
+            'effective_from': {'$lte': now},
+            '$or': [
+                {'effective_until': None},
+                {'effective_until': {'$gte': now}}
+            ]
+        }).sort('bus_type', 1))
+        
+        # If no rates found, return default rates
+        if not tariff_rates:
+            default_rates = [
+                {'bus_type': 'Standard', 'rate_per_km': 2.5, 'minimum_fare': 50},
+                {'bus_type': 'Luxury', 'rate_per_km': 3.5, 'minimum_fare': 50},
+                {'bus_type': 'Premium', 'rate_per_km': 4.0, 'minimum_fare': 50},
+                {'bus_type': 'VIP', 'rate_per_km': 4.5, 'minimum_fare': 50},
+                {'bus_type': 'Sleeper', 'rate_per_km': 5.0, 'minimum_fare': 50}
+            ]
+            return jsonify({
+                'success': True,
+                'tariff_rates': default_rates,
+                'using_defaults': True,
+                'message': 'Using default rates. Admin should configure official rates.'
+            }), 200
+        
+        # Format rates for easy lookup
+        formatted_rates = {}
+        for rate in tariff_rates:
+            formatted_rates[rate['bus_type']] = {
+                'rate_per_km': rate.get('rate_per_km', 2.5),
+                'minimum_fare': rate.get('minimum_fare', 50),
+                'effective_from': rate.get('effective_from').isoformat() if rate.get('effective_from') else None,
+                'effective_until': rate.get('effective_until').isoformat() if rate.get('effective_until') else None,
+                'notes': rate.get('notes', '')
+            }
+        
+        return jsonify({
+            'success': True,
+            'tariff_rates': formatted_rates,
+            'using_defaults': False
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Get current tariff rates error: {e}")
+        return jsonify({'error': f'Failed to fetch current tariff rates: {str(e)}'}), 500
+
+
+@operator_bp.route('/tariff-rates', methods=['POST'])
+@jwt_required()
+def create_tariff_rate():
+    """Create new tariff rate (Admin only)"""
+    try:
+        if not is_admin():
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ['bus_type', 'rate_per_km', 'minimum_fare', 'effective_from']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'error': f'{field} is required'}), 400
+        
+        # Validate bus type
+        valid_bus_types = ['Standard', 'Luxury', 'Premium', 'VIP', 'Sleeper']
+        if data['bus_type'] not in valid_bus_types:
+            return jsonify({'error': f'Invalid bus type. Must be one of: {", ".join(valid_bus_types)}'}), 400
+        
+        # Validate rates
+        if data['rate_per_km'] <= 0:
+            return jsonify({'error': 'Rate per km must be positive'}), 400
+        
+        if data['minimum_fare'] < 0:
+            return jsonify({'error': 'Minimum fare cannot be negative'}), 400
+        
+        # Parse dates
+        try:
+            effective_from = datetime.strptime(data['effective_from'], '%Y-%m-%d')
+        except ValueError:
+            return jsonify({'error': 'Invalid effective_from date format. Use YYYY-MM-DD'}), 400
+        
+        effective_until = None
+        if data.get('effective_until'):
+            try:
+                effective_until = datetime.strptime(data['effective_until'], '%Y-%m-%d')
+                if effective_until <= effective_from:
+                    return jsonify({'error': 'effective_until must be after effective_from'}), 400
+            except ValueError:
+                return jsonify({'error': 'Invalid effective_until date format. Use YYYY-MM-DD'}), 400
+        
+        # Deactivate existing rates for this bus type if requested
+        if data.get('replace_existing', False):
+            mongo.db.tariff_rates.update_many(
+                {
+                    'bus_type': data['bus_type'],
+                    'is_active': True
+                },
+                {
+                    '$set': {
+                        'is_active': False,
+                        'deactivated_at': datetime.now(),
+                        'deactivated_by': get_jwt_identity()
+                    }
+                }
+            )
+        
+        # Create new tariff rate
+        tariff_rate = {
+            'bus_type': data['bus_type'],
+            'rate_per_km': float(data['rate_per_km']),
+            'minimum_fare': float(data['minimum_fare']),
+            'effective_from': effective_from,
+            'effective_until': effective_until,
+            'is_active': True,
+            'notes': data.get('notes', ''),
+            'created_by': get_jwt_identity(),
+            'created_at': datetime.now(),
+            'updated_at': datetime.now()
+        }
+        
+        result = mongo.db.tariff_rates.insert_one(tariff_rate)
+        tariff_rate['_id'] = str(result.inserted_id)
+        
+        logger.info(f"Tariff rate created: {data['bus_type']} - {data['rate_per_km']} ETB/km")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Tariff rate created successfully',
+            'tariff_rate': serialize_document(tariff_rate)
+        }), 201
+        
+    except Exception as e:
+        logger.error(f"Create tariff rate error: {e}")
+        return jsonify({'error': f'Failed to create tariff rate: {str(e)}'}), 500
+
+
+@operator_bp.route('/tariff-rates/<rate_id>', methods=['PUT'])
+@jwt_required()
+def update_tariff_rate(rate_id):
+    """Update tariff rate (Admin only)"""
+    try:
+        if not is_admin():
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        data = request.get_json()
+        rate_oid = validate_object_id(rate_id)
+        
+        # Check if rate exists
+        existing_rate = mongo.db.tariff_rates.find_one({'_id': rate_oid})
+        if not existing_rate:
+            return jsonify({'error': 'Tariff rate not found'}), 404
+        
+        # Prepare update data
+        update_data = {'updated_at': datetime.now()}
+        
+        # Update allowed fields
+        if 'rate_per_km' in data:
+            if data['rate_per_km'] <= 0:
+                return jsonify({'error': 'Rate per km must be positive'}), 400
+            update_data['rate_per_km'] = float(data['rate_per_km'])
+        
+        if 'minimum_fare' in data:
+            if data['minimum_fare'] < 0:
+                return jsonify({'error': 'Minimum fare cannot be negative'}), 400
+            update_data['minimum_fare'] = float(data['minimum_fare'])
+        
+        if 'effective_from' in data:
+            try:
+                update_data['effective_from'] = datetime.strptime(data['effective_from'], '%Y-%m-%d')
+            except ValueError:
+                return jsonify({'error': 'Invalid effective_from date format'}), 400
+        
+        if 'effective_until' in data:
+            if data['effective_until']:
+                try:
+                    update_data['effective_until'] = datetime.strptime(data['effective_until'], '%Y-%m-%d')
+                except ValueError:
+                    return jsonify({'error': 'Invalid effective_until date format'}), 400
+            else:
+                update_data['effective_until'] = None
+        
+        if 'is_active' in data:
+            update_data['is_active'] = bool(data['is_active'])
+            if not data['is_active']:
+                update_data['deactivated_at'] = datetime.now()
+                update_data['deactivated_by'] = get_jwt_identity()
+        
+        if 'notes' in data:
+            update_data['notes'] = data['notes']
+        
+        # Update the rate
+        result = mongo.db.tariff_rates.update_one(
+            {'_id': rate_oid},
+            {'$set': update_data}
+        )
+        
+        if result.modified_count == 0:
+            return jsonify({'error': 'No changes made'}), 400
+        
+        # Get updated rate
+        updated_rate = mongo.db.tariff_rates.find_one({'_id': rate_oid})
+        
+        logger.info(f"Tariff rate updated: {rate_id}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Tariff rate updated successfully',
+            'tariff_rate': serialize_document(updated_rate)
+        }), 200
+        
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logger.error(f"Update tariff rate error: {e}")
+        return jsonify({'error': f'Failed to update tariff rate: {str(e)}'}), 500
+
+
+@operator_bp.route('/tariff-rates/<rate_id>', methods=['DELETE'])
+@jwt_required()
+def delete_tariff_rate(rate_id):
+    """Deactivate tariff rate (Admin only) - soft delete"""
+    try:
+        if not is_admin():
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        rate_oid = validate_object_id(rate_id)
+        
+        # Soft delete - just deactivate
+        result = mongo.db.tariff_rates.update_one(
+            {'_id': rate_oid},
+            {
+                '$set': {
+                    'is_active': False,
+                    'deactivated_at': datetime.now(),
+                    'deactivated_by': get_jwt_identity()
+                }
+            }
+        )
+        
+        if result.modified_count == 0:
+            return jsonify({'error': 'Tariff rate not found or already deactivated'}), 404
+        
+        logger.info(f"Tariff rate deactivated: {rate_id}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Tariff rate deactivated successfully'
+        }), 200
+        
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logger.error(f"Delete tariff rate error: {e}")
+        return jsonify({'error': f'Failed to delete tariff rate: {str(e)}'}), 500
+
+
+@operator_bp.route('/tariff-rates/calculate', methods=['POST'])
+def calculate_tariff():
+    """Calculate tariff for a given distance and bus type (public endpoint)"""
+    try:
+        data = request.get_json()
+        
+        distance = data.get('distance', 0)
+        bus_type = data.get('bus_type', 'Standard')
+        
+        if distance <= 0:
+            return jsonify({'error': 'Distance must be positive'}), 400
+        
+        # Get current rate for bus type
+        now = datetime.now()
+        rate_doc = mongo.db.tariff_rates.find_one({
+            'bus_type': bus_type,
+            'is_active': True,
+            'effective_from': {'$lte': now},
+            '$or': [
+                {'effective_until': None},
+                {'effective_until': {'$gte': now}}
+            ]
+        })
+        
+        # Use default if not found
+        default_rates = {
+            'Standard': 2.5,
+            'Luxury': 3.5,
+            'Premium': 4.0,
+            'VIP': 4.5,
+            'Sleeper': 5.0
+        }
+        
+        if rate_doc:
+            rate_per_km = rate_doc.get('rate_per_km', default_rates.get(bus_type, 2.5))
+            minimum_fare = rate_doc.get('minimum_fare', 50)
+        else:
+            rate_per_km = default_rates.get(bus_type, 2.5)
+            minimum_fare = 50
+        
+        # Calculate tariff
+        calculated_tariff = distance * rate_per_km
+        final_tariff = max(round(calculated_tariff), minimum_fare)
+        
+        return jsonify({
+            'success': True,
+            'calculation': {
+                'distance': distance,
+                'bus_type': bus_type,
+                'rate_per_km': rate_per_km,
+                'minimum_fare': minimum_fare,
+                'calculated_tariff': calculated_tariff,
+                'final_tariff': final_tariff,
+                'formula': f'{distance} km × {rate_per_km} ETB/km = {final_tariff} ETB'
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Calculate tariff error: {e}")
+        return jsonify({'error': f'Failed to calculate tariff: {str(e)}'}), 500

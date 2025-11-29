@@ -115,8 +115,8 @@ def get_schedule_with_cities(schedule_id):
             
             print(f"✅ Route found: {route.get('_id')}")
             
-            departure_city = route.get('originCity')
-            arrival_city = route.get('destinationCity')
+            departure_city = route.get('origin_city')
+            arrival_city = route.get('destination_city')
             print(f"📍 Route cities - origin: {departure_city}, destination: {arrival_city}")
         
         # VALIDATION: Ensure we have both cities
@@ -130,7 +130,7 @@ def get_schedule_with_cities(schedule_id):
         print(f"✅ Cities confirmed: {departure_city} → {arrival_city}")
         
         # Handle travel date - check both formats
-        travel_date_obj = schedule.get('departureDate') or schedule.get('departure_date')
+        travel_date_obj = schedule.get('departure_date') or schedule.get('departure_date')
         if isinstance(travel_date_obj, datetime):
             travel_date = travel_date_obj.strftime('%Y-%m-%d')
         else:
@@ -192,9 +192,9 @@ def create_booking_from_payment(booking_data, user_id, tx_ref, payment_method='c
         base_fare = booking_data.get('base_fare', 0)
         total_amount = base_fare + baggage_fee
         
-        # FIXED: Set status to 'pending' for both payment methods
-        booking_status = 'pending'  # Always set to pending for new bookings
-        payment_status = 'paid'     # Payment is completed
+        # FIXED: Set status to 'confirmed' for paid bookings
+        booking_status = 'confirmed'  # Set to confirmed when payment is completed
+        payment_status = 'paid'       # Payment is completed
         
         print(f"🎯 STATUS SETTINGS: booking='{booking_status}', payment='{payment_status}'")
         
@@ -235,6 +235,9 @@ def create_booking_from_payment(booking_data, user_id, tx_ref, payment_method='c
             'bus_number': schedule_info['bus_number'],
             'bus_name': schedule_info['bus_name'],
             
+            # NEW: Mark as online booking (customer portal)
+            'booking_source': 'online',  # online = customer portal, counter = ticketer
+            
             # Timestamps
             'booked_at': datetime.utcnow(),
             'created_at': datetime.utcnow(),
@@ -243,6 +246,26 @@ def create_booking_from_payment(booking_data, user_id, tx_ref, payment_method='c
         
         # Insert the booking
         result = mongo.db.bookings.insert_one(booking_record)
+        
+        # Update schedule booked seats count
+        num_seats = len(booking_data.get('seat_numbers', []))
+        if num_seats > 0:
+            print(f"🔄 Updating schedule {schedule_id} with {num_seats} seats...")
+            
+            update_result = mongo.db.busschedules.update_one(
+                {'_id': ObjectId(schedule_id)},
+                {
+                    '$inc': {
+                        'booked_seats': num_seats,
+                        'available_seats': -num_seats
+                    }
+                }
+            )
+            
+            if update_result.modified_count > 0:
+                print(f"✅ Schedule updated successfully! Modified: {update_result.modified_count}")
+            else:
+                print(f"⚠️  Schedule NOT updated! Matched: {update_result.matched_count}, Modified: {update_result.modified_count}")
         
         print(f"✅ Booking created successfully: {result.inserted_id}")
         print(f"📋 Booking details: {schedule_info['departure_city']} → {schedule_info['arrival_city']} on {schedule_info['travel_date']}")
@@ -296,6 +319,8 @@ def initialize_chapa_payment():
             'status': 'initiated',
             'payment_method': 'chapa',
             'booking_data': data,
+            # NEW: Mark as online booking
+            'booking_source': 'online',  # online = customer portal, counter = ticketer
             'created_at': datetime.utcnow()
         }
         
@@ -310,17 +335,23 @@ def initialize_chapa_payment():
         return_url = f"{frontend_url}/payment-callback?tx_ref={tx_ref}"
         callback_url = f"{base_url}/payments/chapa/callback"
         
-        # Prepare Chapa request
+        # Get and validate email - Force test email for Chapa test mode
+        email = data.get('email', '').strip()
+        # Override with test email if it's the default or invalid
+        if not email or '@' not in email or len(email) < 5 or 'customer@ethiobus' in email:
+            email = 'test@test.com'  # Chapa test mode default
+        
+        # Prepare Chapa request - ensure all fields are strings
         chapa_data = {
-            'amount': str(data['amount']),
+            'amount': str(data.get('amount', 0)),
             'currency': 'ETB',
-            'email': data.get('email', 'test@example.com'),
-            'first_name': data.get('first_name', 'Test'),
-            'last_name': data.get('last_name', 'User'),
-            'phone_number': data.get('phone_number', '0900123456'),
-            'tx_ref': tx_ref,
-            'callback_url': callback_url,
-            'return_url': return_url,
+            'email': str(email),
+            'first_name': str(data.get('first_name', 'Test')),
+            'last_name': str(data.get('last_name', 'User')),
+            'phone_number': str(data.get('phone_number', '0911000000')),
+            'tx_ref': str(tx_ref),
+            'callback_url': str(callback_url),
+            'return_url': str(return_url),
             'customization': {
                 'title': 'EthioBus Booking',
                 'description': 'Bus Ticket Payment'
@@ -328,6 +359,8 @@ def initialize_chapa_payment():
         }
         
         print(f"📤 Making request to Chapa API with tx_ref: {tx_ref}")
+        print(f"📋 Chapa data: email={chapa_data['email']}, first_name={chapa_data['first_name']}, amount={chapa_data['amount']}, phone={chapa_data['phone_number']}")
+        print(f"📋 Full Chapa request: {chapa_data}")
         
         headers = {
             'Authorization': f'Bearer {chapa_secret_key}',
@@ -597,15 +630,15 @@ def verify_payment(tx_ref):
             'message': f'Verification failed: {str(e)}'
         }), 500
 
-@payments_bp.route('/cash', methods=['POST'])
+@payments_bp.route('/telebirr', methods=['POST'])
 @jwt_required()
-def create_cash_payment():
-    """Create booking with cash payment - SET STATUS TO PENDING"""
+def create_telebirr_payment():
+    """Create booking with Telebirr payment - SET STATUS TO PENDING"""
     try:
         data = request.get_json()
         user_id = get_jwt_identity()
         
-        print(f"💵 Creating cash booking for user {user_id}")
+        print(f"📱 Creating Telebirr booking for user {user_id}")
         print(f"📦 Booking data: {data}")
         
         # Required fields validation
@@ -639,11 +672,11 @@ def create_cash_payment():
         
         print(f"💰 Pricing - Base: {base_fare}, Baggage: {baggage_fee}, Total: {total_amount}")
         
-        # FIXED: Set status to 'pending' for cash payments
-        booking_status = 'pending'
+        # FIXED: Set status to 'confirmed' for Telebirr payments
+        booking_status = 'confirmed'
         payment_status = 'paid'
         
-        print(f"🎯 CASH PAYMENT STATUS: booking='{booking_status}', payment='{payment_status}'")
+        print(f"🎯 TELEBIRR PAYMENT STATUS: booking='{booking_status}', payment='{payment_status}'")
         
         # Create booking record
         booking_record = {
@@ -667,7 +700,7 @@ def create_cash_payment():
             'baggage_tag': baggage_tag,
             
             # Payment Information
-            'payment_method': 'cash',
+            'payment_method': 'telebirr',
             'payment_status': payment_status,
             
             # Route Information (from schedule)
@@ -680,6 +713,9 @@ def create_cash_payment():
             'bus_type': schedule_info['bus_type'],
             'bus_number': schedule_info['bus_number'],
             'bus_name': schedule_info['bus_name'],
+            
+            # NEW: Mark as online booking (customer portal)
+            'booking_source': 'online',  # online = customer portal, counter = ticketer
             
             # Timestamps
             'booked_at': datetime.utcnow(),
@@ -697,16 +733,35 @@ def create_cash_payment():
         # Insert the booking
         result = mongo.db.bookings.insert_one(booking_record)
         
-        print(f"✅ Cash booking created: {result.inserted_id}")
+        # Update schedule booked seats count
+        num_seats = len(data['seat_numbers'])
+        print(f"🔄 Updating schedule {schedule_id} with {num_seats} seats...")
+        
+        update_result = mongo.db.busschedules.update_one(
+            {'_id': ObjectId(schedule_id)},
+            {
+                '$inc': {
+                    'booked_seats': num_seats,
+                    'available_seats': -num_seats
+                }
+            }
+        )
+        
+        if update_result.modified_count > 0:
+            print(f"✅ Schedule updated successfully! Modified: {update_result.modified_count}")
+        else:
+            print(f"⚠️  Schedule NOT updated! Matched: {update_result.matched_count}, Modified: {update_result.modified_count}")
+        
+        print(f"✅ Telebirr booking created: {result.inserted_id}")
         
         return jsonify({
             'success': True,
-            'message': 'Booking created successfully with cash payment.',
+            'message': 'Booking created successfully with Telebirr payment.',
             'booking_id': str(result.inserted_id),
             'pnr_number': pnr_number,
             'baggage_tag': baggage_tag,
             'status': booking_status,  # Return pending status
-            'payment_method': 'cash',
+            'payment_method': 'telebirr',
             'payment_status': payment_status,  # Return paid status
             'route': f"{schedule_info['departure_city']} → {schedule_info['arrival_city']}",
             'travel_date': schedule_info['travel_date'],
@@ -716,10 +771,10 @@ def create_cash_payment():
         }), 200
         
     except Exception as e:
-        print(f"❌ Cash booking error: {str(e)}")
+        print(f"❌ Telebirr booking error: {str(e)}")
         import traceback
         print(f"❌ Traceback: {traceback.format_exc()}")
-        return jsonify({'error': f'Cash booking failed: {str(e)}'}), 500
+        return jsonify({'error': f'Telebirr booking failed: {str(e)}'}), 500
 
 @payments_bp.route('/methods', methods=['GET'])
 def get_payment_methods():
@@ -734,10 +789,17 @@ def get_payment_methods():
             'supported_methods': ['telebirr', 'cbebirr', 'hellocash', 'bank', 'visa', 'mastercard']
         },
         {
-            'id': 'cash',
-            'name': 'Pay at Station',
-            'description': 'Pay cash at bus station or office',
-            'icon': 'cash',
+            'id': 'telebirr',
+            'name': 'Telebirr',
+            'description': 'Pay with Telebirr mobile money',
+            'icon': 'mobile',
+            'supported': True
+        },
+        {
+            'id': 'cbe',
+            'name': 'CBE Birr',
+            'description': 'Pay with Commercial Bank of Ethiopia',
+            'icon': 'bank',
             'supported': True
         }
     ]
@@ -772,16 +834,16 @@ def debug_schedule(schedule_id):
                 'id': str(schedule['_id']),
                 'departure_city': schedule.get('departure_city'),
                 'arrival_city': schedule.get('arrival_city'),
-                'departureDate': str(schedule.get('departureDate')),
-                'departureTime': schedule.get('departureTime'),
-                'busType': schedule.get('busType'),
-                'busNumber': schedule.get('busNumber'),
-                'routeId': str(route_id) if route_id else None
+                'departure_date': str(schedule.get('departure_date')),
+                'departure_time': schedule.get('departure_time'),
+                'bus_type': schedule.get('bus_type'),
+                'bus_number': schedule.get('bus_number'),
+                'route_id': str(route_id) if route_id else None
             },
             'route': {
                 'id': str(route['_id']) if route else None,
-                'originCity': route.get('originCity') if route else None,
-                'destinationCity': route.get('destinationCity') if route else None
+                'origin_city': route.get('origin_city') if route else None,
+                'destination_city': route.get('destination_city') if route else None
             } if route else None
         }
         

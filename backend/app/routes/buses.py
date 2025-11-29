@@ -192,8 +192,8 @@ def get_bus(bus_id):
         # Get upcoming schedules for this bus
         upcoming_schedules = list(mongo.db.busschedules.find({
             'busId': bus_id,
-            'departureDate': {'$gte': datetime.utcnow().strftime('%Y-%m-%d')}
-        }).sort('departureDate', 1).limit(5))
+            'departure_date': {'$gte': datetime.utcnow().strftime('%Y-%m-%d')}
+        }).sort('departure_date', 1).limit(5))
         
         # Format schedules
         formatted_schedules = []
@@ -201,9 +201,9 @@ def get_bus(bus_id):
             route = mongo.db.routes.find_one({'_id': ObjectId(schedule['routeId'])})
             formatted_schedule = {
                 'schedule_id': str(schedule['_id']),
-                'departure_date': schedule.get('departureDate'),
-                'departure_time': schedule.get('departureTime'),
-                'route': f"{route.get('originCity', 'Unknown')} → {route.get('destinationCity', 'Unknown')}" if route else 'Unknown Route',
+                'departure_date': schedule.get('departure_date'),
+                'departure_time': schedule.get('departure_time'),
+                'route': f"{route.get('origin_city', 'Unknown')} → {route.get('destination_city', 'Unknown')}" if route else 'Unknown Route',
                 'status': schedule.get('status', 'active')
             }
             formatted_schedules.append(formatted_schedule)
@@ -281,7 +281,7 @@ def set_bus_maintenance(bus_id):
         # Cancel or update upcoming schedules for this bus
         upcoming_schedules = mongo.db.busschedules.find({
             'busId': bus_id,
-            'departureDate': {'$gte': datetime.utcnow().strftime('%Y-%m-%d')},
+            'departure_date': {'$gte': datetime.utcnow().strftime('%Y-%m-%d')},
             'status': 'active'
         })
         
@@ -413,14 +413,14 @@ def get_bus_schedules(bus_id):
         
         # Add date range filter
         if date_from:
-            query['departureDate'] = {'$gte': date_from}
+            query['departure_date'] = {'$gte': date_from}
         if date_to:
-            if 'departureDate' in query:
-                query['departureDate']['$lte'] = date_to
+            if 'departure_date' in query:
+                query['departure_date']['$lte'] = date_to
             else:
-                query['departureDate'] = {'$lte': date_to}
+                query['departure_date'] = {'$lte': date_to}
         
-        schedules_cursor = mongo.db.busschedules.find(query).sort('departureDate', 1)
+        schedules_cursor = mongo.db.busschedules.find(query).sort('departure_date', 1)
         schedules = list(schedules_cursor)
         
         # Enrich with route information and booking counts
@@ -436,16 +436,16 @@ def get_bus_schedules(bus_id):
             
             enriched_schedule = {
                 '_id': str(schedule['_id']),
-                'departure_time': schedule.get('departureTime'),
-                'arrival_time': schedule.get('arrivalTime'),
-                'departure_date': schedule.get('departureDate'),
-                'available_seats': schedule.get('availableSeats'),
-                'fare': schedule.get('fareBirr'),
+                'departure_time': schedule.get('departure_time'),
+                'arrival_time': schedule.get('arrival_time'),
+                'departure_date': schedule.get('departure_date'),
+                'available_seats': schedule.get('available_seats'),
+                'fare': schedule.get('fare_birr'),
                 'status': schedule.get('status', 'active'),
                 'booking_count': booking_count,
                 'route': {
-                    'origin': route.get('originCity') if route else 'Unknown',
-                    'destination': route.get('destinationCity') if route else 'Unknown',
+                    'origin': route.get('origin_city') if route else 'Unknown',
+                    'destination': route.get('destination_city') if route else 'Unknown',
                     'route_id': str(route['_id']) if route else None
                 } if route else None
             }
@@ -519,7 +519,7 @@ def get_bus_health(bus_id):
         # Get recent schedules performance
         recent_schedules = list(mongo.db.busschedules.find({
             'busId': bus_id,
-            'departureDate': {'$gte': (datetime.utcnow() - timedelta(days=30)).strftime('%Y-%m-%d')}
+            'departure_date': {'$gte': (datetime.utcnow() - timedelta(days=30)).strftime('%Y-%m-%d')}
         }))
         
         total_schedules = len(recent_schedules)

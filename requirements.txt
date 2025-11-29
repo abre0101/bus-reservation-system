@@ -1,0 +1,9 @@
+@"
+flask==2.3.3
+flask-sqlalchemy==3.0.5
+flask-cors==4.0.0
+flask-jwt-extended==4.5.3
+pymysql==1.1.0
+requests==2.31.0
+python-dotenv==1.0.0
+"@ | Out-File -FilePath requirements.txt -Encoding utf8
