@@ -6,6 +6,7 @@ import {
   Shield, Bell, Wifi, WifiOff, Camera, X
 } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 
 const CheckIn = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -25,8 +26,9 @@ const CheckIn = () => {
   const [idVerification, setIdVerification] = useState('');
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [notificationEnabled, setNotificationEnabled] = useState(false);
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
+  const [pendingFilter, setPendingFilter] = useState('all'); // 'all' or 'ready'
+  const scannerRef = useRef(null);
+  const qrScannerInstance = useRef(null);
   const autoRefreshInterval = useRef(null);
 
   useEffect(() => {
@@ -151,13 +153,88 @@ const CheckIn = () => {
   const fetchPendingCheckins = async () => {
     try {
       const token = getAuthToken();
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/operator/checkins/pending`,
-        { headers: { Authorization: `Bearer ${token}` } }
+      
+      // Fetch today's bookings that need check-in
+      // Try multiple endpoints to find the right one
+      let bookings = [];
+      
+      try {
+        // Try the bookings endpoint with filters for today and not checked in
+        const today = new Date().toISOString().split('T')[0];
+        const response = await axios.get(
+          `${import.meta.env.VITE_API_URL}/operator/bookings`,
+          { 
+            params: {
+              travel_date: today,
+              status: 'confirmed',
+              check_in_status: 'pending'
+            },
+            headers: { Authorization: `Bearer ${token}` } 
+          }
+        );
+        bookings = response.data.bookings || response.data.data || [];
+        console.log('📋 Fetched from /operator/bookings:', bookings.length);
+      } catch (error) {
+        console.log('First endpoint failed, trying alternative...');
+        
+        // Fallback: Try checkins/pending endpoint
+        try {
+          const response = await axios.get(
+            `${import.meta.env.VITE_API_URL}/operator/checkins/pending`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          bookings = response.data.bookings || response.data.data || [];
+          console.log('📋 Fetched from /operator/checkins/pending:', bookings.length);
+        } catch (error2) {
+          console.log('Second endpoint failed, trying stats endpoint...');
+          
+          // Last fallback: Get from dashboard stats
+          try {
+            const response = await axios.get(
+              `${import.meta.env.VITE_API_URL}/operator/dashboard/stats`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            bookings = response.data.pendingBookings || response.data.pending_checkins || [];
+            console.log('📋 Fetched from dashboard stats:', bookings.length);
+          } catch (error3) {
+            console.error('All endpoints failed');
+          }
+        }
+      }
+      
+      // Filter to only show bookings that haven't been checked in
+      bookings = bookings.filter(b => 
+        b.status !== 'checked_in' && 
+        b.status !== 'completed' && 
+        b.status !== 'cancelled' &&
+        b.check_in_status !== 'checked_in'
       );
-      setPendingCheckins(response.data.bookings || []);
+      
+      console.log('📋 After filtering:', bookings.length, 'pending check-ins');
+      
+      // Sort bookings: available for check-in first, then by departure time
+      bookings = bookings.sort((a, b) => {
+        try {
+          const validationA = validateCheckIn(a);
+          const validationB = validateCheckIn(b);
+          
+          // Prioritize bookings that are ready for check-in
+          if (validationA.valid && !validationB.valid) return -1;
+          if (!validationA.valid && validationB.valid) return 1;
+          
+          // Then sort by departure time
+          const timeA = new Date(`${a.travel_date} ${a.departure_time}`);
+          const timeB = new Date(`${b.travel_date} ${b.departure_time}`);
+          return timeA - timeB;
+        } catch (error) {
+          return 0;
+        }
+      });
+      
+      setPendingCheckins(bookings);
     } catch (error) {
       console.error('Error fetching pending check-ins:', error);
+      setPendingCheckins([]); // Set empty array on error
     }
   };
 
@@ -315,9 +392,24 @@ const CheckIn = () => {
 
         // Block if too early (more than 24 hours before departure)
         if (now < twentyFourHoursBefore) {
+          const diffToCheckinOpen = twentyFourHoursBefore - now;
+          const hoursRemaining = Math.floor(diffToCheckinOpen / (1000 * 60 * 60));
+          const minutesRemaining = Math.floor((diffToCheckinOpen % (1000 * 60 * 60)) / (1000 * 60));
+          
+          let timeMessage = '';
+          if (hoursRemaining > 24) {
+            const daysRemaining = Math.floor(hoursRemaining / 24);
+            const remainingHours = hoursRemaining % 24;
+            timeMessage = `Opens in ${daysRemaining}d ${remainingHours}h`;
+          } else if (hoursRemaining > 0) {
+            timeMessage = `Opens in ${hoursRemaining}h ${minutesRemaining}m`;
+          } else {
+            timeMessage = `Opens in ${minutesRemaining}m`;
+          }
+          
           return { 
             valid: false, 
-            message: `Check-in opens 24 hours before departure` 
+            message: `Check-in not open yet. ${timeMessage}` 
           };
         }
 
@@ -478,56 +570,107 @@ const CheckIn = () => {
     }
   };
 
-  // QR Code Scanner
-  const startQRScanner = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' } 
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-        scanQRCode();
+  // QR Code Scanner with html5-qrcode
+  const startQRScanner = () => {
+    setShowQRScanner(true);
+    
+    setTimeout(() => {
+      if (scannerRef.current && !qrScannerInstance.current) {
+        qrScannerInstance.current = new Html5QrcodeScanner(
+          "qr-reader-operator",
+          { 
+            fps: 10,
+            qrbox: { width: 250, height: 250 },
+            aspectRatio: 1.0
+          },
+          false
+        );
+
+        qrScannerInstance.current.render(onScanSuccess, onScanError);
       }
-    } catch (error) {
-      toast.error('Camera access denied');
-      setShowQRScanner(false);
-    }
+    }, 100);
   };
 
   const stopQRScanner = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+    if (qrScannerInstance.current) {
+      qrScannerInstance.current.clear().catch(error => {
+        console.error("Failed to clear scanner:", error);
+      });
+      qrScannerInstance.current = null;
     }
     setShowQRScanner(false);
   };
 
-  const scanQRCode = () => {
-    if (!videoRef.current || !canvasRef.current) return;
-
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
-    const context = canvas.getContext('2d');
-
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+  const onScanSuccess = async (decodedText, decodedResult) => {
+    console.log(`QR Code scanned: ${decodedText}`);
+    toast.info('QR Code detected! Processing...');
     
-    // Here you would integrate a QR code library like jsQR
-    // For now, we'll simulate it
-    setTimeout(() => scanQRCode(), 100);
-  };
-
-  useEffect(() => {
-    if (showQRScanner) {
-      startQRScanner();
-    } else {
+    try {
+      // Parse QR code data
+      const qrData = JSON.parse(decodedText);
+      console.log('Parsed QR data:', qrData);
+      
+      // Stop scanner
+      stopQRScanner();
+      
+      // Search by PNR from QR code
+      if (qrData.pnr) {
+        setSearchType('pnr');
+        setSearchQuery(qrData.pnr);
+        
+        // Automatically search
+        setLoading(true);
+        setBookingDetails(null);
+        
+        const token = getAuthToken();
+        const response = await axios.get(
+          `${import.meta.env.VITE_API_URL}/operator/bookings/search`,
+          {
+            params: { pnr: qrData.pnr },
+            headers: { Authorization: `Bearer ${token}` }
+          }
+        );
+        
+        if (response.data.booking) {
+          setBookingDetails(response.data.booking);
+          toast.success('Booking found via QR code!');
+          
+          // Scroll to booking details
+          setTimeout(() => {
+            document.getElementById('booking-details')?.scrollIntoView({ 
+              behavior: 'smooth', 
+              block: 'start' 
+            });
+          }, 100);
+        } else {
+          toast.error('No booking found with the scanned QR code');
+        }
+        setLoading(false);
+      } else {
+        toast.error('Invalid QR code format');
+      }
+    } catch (error) {
+      console.error('QR scan error:', error);
+      toast.error('Failed to process QR code');
       stopQRScanner();
     }
-    return () => stopQRScanner();
-  }, [showQRScanner]);
+  };
+
+  const onScanError = (errorMessage) => {
+    // Ignore frequent scanning errors
+    if (!errorMessage.includes('NotFoundException')) {
+      console.warn(`QR Scan error: ${errorMessage}`);
+    }
+  };
+
+  // Cleanup scanner on unmount
+  useEffect(() => {
+    return () => {
+      if (qrScannerInstance.current) {
+        qrScannerInstance.current.clear().catch(console.error);
+      }
+    };
+  }, []);
 
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && !loading) {
@@ -649,8 +792,10 @@ const CheckIn = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-orange-800">Pending Check-ins</p>
-              <p className="text-3xl font-bold text-orange-900 mt-2">{stats.pending}</p>
-              <p className="text-sm text-orange-700 mt-1">Need attention</p>
+              <p className="text-3xl font-bold text-orange-900 mt-2">{pendingCheckins.length}</p>
+              <p className="text-sm text-orange-700 mt-1">
+                {pendingCheckins.filter(b => validateCheckIn(b).valid).length} ready now
+              </p>
             </div>
             <Clock className="h-10 w-10 text-orange-600" />
           </div>
@@ -660,7 +805,7 @@ const CheckIn = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-green-800">Checked-in Today</p>
-              <p className="text-3xl font-bold text-green-900 mt-2">{stats.checkedIn}</p>
+              <p className="text-3xl font-bold text-green-900 mt-2">{recentCheckins.length}</p>
               <p className="text-sm text-green-700 mt-1">Successfully checked in</p>
             </div>
             <CheckCircle className="h-10 w-10 text-green-600" />
@@ -675,37 +820,6 @@ const CheckIn = () => {
               <p className="text-sm text-blue-700 mt-1">Running today</p>
             </div>
             <Calendar className="h-10 w-10 text-blue-600" />
-          </div>
-        </div>
-      </div>
-
-      {/* Filters Section */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="md:col-span-2">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Quick Search</label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-              <input
-                type="text"
-                placeholder="Search by PNR, name, or phone..."
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Filter by Schedule</label>
-            <select
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="all">All Schedules</option>
-              {todaySchedules.map(schedule => (
-                <option key={schedule._id} value={schedule._id}>
-                  {schedule.departure_city} → {schedule.arrival_city} ({schedule.departure_time})
-                </option>
-              ))}
-            </select>
           </div>
         </div>
       </div>
@@ -814,11 +928,12 @@ const CheckIn = () => {
                 {loading ? 'Searching...' : 'Search'}
               </button>
               <button
-                onClick={() => setShowQRScanner(!showQRScanner)}
-                className="px-4 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
+                onClick={startQRScanner}
+                className="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all shadow-sm hover:shadow-md flex items-center gap-2 font-medium"
                 title="Scan QR Code"
               >
-                <QrCode className="w-4 h-4" />
+                <QrCode className="w-5 h-5" />
+                <span>Scan QR</span>
               </button>
             </div>
           </div>
@@ -827,29 +942,39 @@ const CheckIn = () => {
 
       {/* QR Scanner Modal */}
       {showQRScanner && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold flex items-center gap-2">
-                <Camera className="w-5 h-5" />
-                Scan QR Code
-              </h3>
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full">
+            <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-6 flex items-center justify-between rounded-t-2xl">
+              <div className="flex items-center space-x-3">
+                <Camera className="h-6 w-6" />
+                <h2 className="text-2xl font-bold">Scan QR Code</h2>
+              </div>
               <button
-                onClick={() => setShowQRScanner(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                onClick={stopQRScanner}
+                className="p-2 hover:bg-white/20 rounded-lg transition-colors"
               >
-                <X className="w-5 h-5" />
+                <X className="h-6 w-6" />
               </button>
             </div>
-            <div className="relative bg-gray-900 rounded-lg overflow-hidden">
-              <video ref={videoRef} className="w-full h-64 object-cover" />
-              <canvas ref={canvasRef} className="hidden" />
-              <div className="absolute inset-0 border-4 border-blue-500 opacity-50 pointer-events-none" 
-                   style={{ margin: '20%' }} />
+            
+            <div className="p-6">
+              <div className="bg-gray-100 rounded-xl p-4 mb-4">
+                <p className="text-sm text-gray-700 text-center">
+                  Position the QR code within the frame to scan
+                </p>
+              </div>
+              
+              <div 
+                id="qr-reader-operator" 
+                ref={scannerRef}
+                className="rounded-xl overflow-hidden"
+              ></div>
+              
+              <div className="mt-4 flex items-center justify-center space-x-2 text-sm text-gray-600">
+                <AlertCircle className="h-4 w-4" />
+                <span>Make sure the QR code is clear and well-lit</span>
+              </div>
             </div>
-            <p className="text-sm text-gray-600 mt-4 text-center">
-              Position the QR code within the frame
-            </p>
           </div>
         </div>
       )}
@@ -1024,23 +1149,57 @@ const CheckIn = () => {
         </div>
       )}
 
-      {/* Pending Check-ins List */}
-      {pendingCheckins.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-yellow-600" />
-              Pending Check-ins ({pendingCheckins.length})
-            </h2>
+      {/* Pending Check-ins List - Always show */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+            <div className="flex items-center gap-4">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Clock className="w-5 h-5 text-yellow-600" />
+                Pending Check-ins ({(() => {
+                  const filtered = pendingFilter === 'ready' 
+                    ? pendingCheckins.filter(b => validateCheckIn(b).valid)
+                    : pendingCheckins;
+                  return filtered.length;
+                })()})
+              </h2>
+              
+              {/* Filter Buttons */}
+              <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+                <button
+                  onClick={() => setPendingFilter('all')}
+                  className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                    pendingFilter === 'all'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  All ({pendingCheckins.length})
+                </button>
+                <button
+                  onClick={() => setPendingFilter('ready')}
+                  className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                    pendingFilter === 'ready'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Ready ({pendingCheckins.filter(b => validateCheckIn(b).valid).length})
+                </button>
+              </div>
+            </div>
+            
             {bulkMode && (
               <button
                 onClick={() => {
-                  const allIds = pendingCheckins.map(b => b._id || b.booking_id);
+                  const filtered = pendingFilter === 'ready' 
+                    ? pendingCheckins.filter(b => validateCheckIn(b).valid)
+                    : pendingCheckins;
+                  const allIds = filtered.map(b => b._id || b.booking_id);
                   setSelectedBookings(allIds);
                 }}
                 className="text-sm text-blue-600 hover:text-blue-700 font-medium"
               >
-                Select All
+                Select All Visible
               </button>
             )}
           </div>
@@ -1062,9 +1221,13 @@ const CheckIn = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {pendingCheckins.slice(0, 10).map((booking) => {
-                  const bookingId = booking._id || booking.booking_id;
-                  const validation = validateCheckIn(booking);
+                {(() => {
+                  const filtered = pendingFilter === 'ready' 
+                    ? pendingCheckins.filter(b => validateCheckIn(b).valid)
+                    : pendingCheckins;
+                  return filtered.slice(0, 20).map((booking) => {
+                    const bookingId = booking._id || booking.booking_id;
+                    const validation = validateCheckIn(booking);
                   
                   return (
                     <tr key={bookingId} className="hover:bg-gray-50">
@@ -1125,10 +1288,21 @@ const CheckIn = () => {
                       <td className="px-4 py-3">
                         <button
                           onClick={async () => {
+                            // Re-validate at click time to ensure current state
+                            const currentValidation = validateCheckIn(booking);
+                            
                             // Block if check-in is not available
-                            if (!validation.valid) {
-                              toast.warning(validation.message);
+                            if (!currentValidation.valid) {
+                              toast.error(currentValidation.message);
                               return;
+                            }
+                            
+                            // Show warning if there's a warning flag
+                            if (currentValidation.warning) {
+                              const confirmed = window.confirm(
+                                `${currentValidation.message}\n\nDo you want to proceed with check-in?`
+                              );
+                              if (!confirmed) return;
                             }
                             
                             // Directly search with PNR instead of using state
@@ -1195,12 +1369,40 @@ const CheckIn = () => {
                       </td>
                     </tr>
                   );
-                })}
+                  });
+                })()}
               </tbody>
             </table>
           </div>
+          
+          {/* Show message if list is empty */}
+          {(() => {
+            if (pendingCheckins.length === 0) {
+              return (
+                <div className="text-center py-12 text-gray-500">
+                  <Ticket className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                  <p className="text-lg font-medium text-gray-700">No Pending Check-ins</p>
+                  <p className="text-sm mt-2">All passengers have been checked in or there are no bookings for today</p>
+                </div>
+              );
+            }
+            
+            const filtered = pendingFilter === 'ready' 
+              ? pendingCheckins.filter(b => validateCheckIn(b).valid)
+              : pendingCheckins;
+              
+            if (filtered.length === 0 && pendingFilter === 'ready') {
+              return (
+                <div className="text-center py-8 text-gray-500">
+                  <Clock className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                  <p className="font-medium">No bookings ready for check-in yet</p>
+                  <p className="text-sm mt-1">Check-in opens 24 hours before departure. Switch to "All" to see upcoming bookings.</p>
+                </div>
+              );
+            }
+            return null;
+          })()}
         </div>
-      )}
 
       {/* Recent Check-ins */}
       {recentCheckins.length > 0 && (

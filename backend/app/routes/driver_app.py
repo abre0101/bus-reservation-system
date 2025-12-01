@@ -728,7 +728,7 @@ def get_trip_details(trip_id):
 @driver_app_bp.route('/trips/<trip_id>/passengers', methods=['GET'])
 @jwt_required()
 def get_trip_passengers(trip_id):
-    """Get passenger list for a trip"""
+    """Get passenger list for a trip with check-in availability status"""
     try:
         driver = get_current_driver()
         if not driver:
@@ -737,6 +737,20 @@ def get_trip_passengers(trip_id):
         trip = mongo.db.busschedules.find_one({'_id': ObjectId(trip_id)})
         if not trip or trip.get('driver_id') != str(driver['_id']):
             return jsonify({'error': 'Trip not found or unauthorized'}), 404
+        
+        # Get trip departure time for check-in validation
+        travel_date = trip.get('departure_date', '')
+        departure_time = trip.get('departure_time', '00:00')
+        now = datetime.now()
+        
+        # Calculate check-in window
+        checkin_opens_at = None
+        travel_datetime = None
+        try:
+            travel_datetime = datetime.strptime(f"{travel_date} {departure_time}", '%Y-%m-%d %H:%M')
+            checkin_opens_at = travel_datetime - timedelta(hours=24)
+        except Exception as e:
+            print(f"Error parsing trip time: {e}")
         
         # Query bookings by both string and ObjectId formats
         query = get_schedule_id_query(trip_id)
@@ -752,6 +766,28 @@ def get_trip_passengers(trip_id):
             else:
                 seat_display = str(seat_numbers) if seat_numbers else 'N/A'
             
+            # Calculate check-in availability for this passenger
+            can_checkin = True
+            checkin_message = 'Ready to check in'
+            checkin_status = 'available'
+            
+            if booking.get('status') == 'checked_in':
+                can_checkin = False
+                checkin_message = 'Already checked in'
+                checkin_status = 'checked_in'
+            elif checkin_opens_at and travel_datetime:
+                if now < checkin_opens_at:
+                    can_checkin = False
+                    time_until_checkin = (checkin_opens_at - now).total_seconds() / 60
+                    hours = int(time_until_checkin // 60)
+                    minutes = int(time_until_checkin % 60)
+                    checkin_message = f'Opens in {hours}h {minutes}m'
+                    checkin_status = 'too_early'
+                elif now > travel_datetime:
+                    can_checkin = True  # Allow late check-in
+                    checkin_message = 'Late check-in (bus departed)'
+                    checkin_status = 'late'
+            
             passengers.append({
                 '_id': str(booking['_id']),
                 'booking_reference': booking.get('booking_reference') or booking.get('pnr_number'),
@@ -766,10 +802,21 @@ def get_trip_passengers(trip_id):
                 'baggage_weight': booking.get('baggage_weight', 0),
                 'has_baggage': booking.get('has_baggage', False),
                 'special_needs': booking.get('special_needs'),
-                'emergency_contact': booking.get('emergency_contact')
+                'emergency_contact': booking.get('emergency_contact'),
+                # Check-in availability info
+                'can_checkin': can_checkin,
+                'checkin_message': checkin_message,
+                'checkin_status': checkin_status
             })
         
-        return jsonify({'passengers': passengers}), 200
+        return jsonify({
+            'passengers': passengers,
+            'trip_info': {
+                'departure_date': travel_date,
+                'departure_time': departure_time,
+                'checkin_opens_at': checkin_opens_at.isoformat() if checkin_opens_at else None
+            }
+        }), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -778,7 +825,7 @@ def get_trip_passengers(trip_id):
 @driver_app_bp.route('/trips/<trip_id>/checkin', methods=['POST'])
 @jwt_required()
 def checkin_passenger(trip_id):
-    """Check in a passenger for a trip"""
+    """Check in a passenger for a trip with 24-hour window validation"""
     try:
         driver = get_current_driver()
         if not driver:
@@ -803,11 +850,40 @@ def checkin_passenger(trip_id):
         if booking.get('status') == 'checked_in':
             return jsonify({'error': 'Passenger already checked in'}), 400
         
+        # Validate 24-hour check-in window
+        travel_date = booking.get('travel_date', '')
+        departure_time = booking.get('departure_time', '00:00')
+        
+        try:
+            travel_datetime = datetime.strptime(f"{travel_date} {departure_time}", '%Y-%m-%d %H:%M')
+            checkin_opens_at = travel_datetime - timedelta(hours=24)
+            now = datetime.now()
+            
+            # Check if check-in window is open (24 hours before departure)
+            if now < checkin_opens_at:
+                time_until_checkin = (checkin_opens_at - now).total_seconds() / 60
+                hours = int(time_until_checkin // 60)
+                minutes = int(time_until_checkin % 60)
+                return jsonify({
+                    'error': f'Check-in not available yet. Opens in {hours}h {minutes}m (24 hours before departure)',
+                    'checkin_opens_at': checkin_opens_at.isoformat(),
+                    'time_until_checkin_minutes': int(time_until_checkin)
+                }), 400
+            
+            # Allow check-in even after departure (for late arrivals) but log a warning
+            if now > travel_datetime:
+                print(f"⚠️ Late check-in: Passenger checking in after departure time")
+                
+        except Exception as e:
+            print(f"Error validating check-in time: {e}")
+            # Continue with check-in if time validation fails
+        
         # Update booking status
         mongo.db.bookings.update_one(
             {'_id': ObjectId(booking_id)},
             {'$set': {
                 'status': 'checked_in',
+                'check_in_status': 'checked_in',
                 'checked_in_at': datetime.utcnow(),
                 'checked_in_by': str(driver['_id'])
             }}

@@ -1,0 +1,137 @@
+/* Print Ticket Styles - Professional Bus Ticket Layout */
+
+/* Hide print ticket on screen */
+.print-ticket-container {
+  display: none;
+}
+
+@media print {
+  /* Page setup */
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+
+  /* Reset body */
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+  }
+
+  /* Hide everything except print ticket */
+  body * {
+    visibility: hidden;
+  }
+
+  #print-ticket,
+  #print-ticket * {
+    visibility: visible;
+  }
+
+  #print-ticket {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+
+  /* Show the print ticket */
+  .print-ticket-container {
+    display: block !important;
+    visibility: visible !important;
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+    background: white;
+    page-break-after: avoid;
+    page-break-inside: avoid;
+    font-family: 'Arial', 'Helvetica', sans-serif;
+    font-size: 10pt;
+    line-height: 1.3;
+    color: #000;
+  }
+
+  /* Ensure colors print */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Borders and backgrounds */
+  .ticket-border {
+    border: 3px solid #2563eb !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+  }
+
+  .ticket-header {
+    background: #2563eb !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color: white !important;
+  }
+
+  /* Perforated edge effect */
+  .perforation {
+    border-top: 2px dashed #cbd5e1 !important;
+    margin: 20px 0 !important;
+    position: relative;
+  }
+
+  .perforation::before,
+  .perforation::after {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    background: white;
+    border: 2px solid #cbd5e1;
+    border-radius: 50%;
+    top: -11px;
+  }
+
+  .perforation::before {
+    left: -11px;
+  }
+
+  .perforation::after {
+    right: -11px;
+  }
+
+  /* QR Code - ensure it prints */
+  svg {
+    display: block !important;
+    visibility: visible !important;
+  }
+  
+  /* Barcode simulation (fallback) */
+  .barcode-lines {
+    display: flex !important;
+    gap: 2px !important;
+    height: 60px !important;
+    align-items: flex-end !important;
+    justify-content: center !important;
+    background: white !important;
+    padding: 10px !important;
+  }
+
+  .barcode-line {
+    width: 3px !important;
+    background: #000 !important;
+    display: block !important;
+  }
+
+  /* Ensure all text is visible */
+  .print-ticket-container div,
+  .print-ticket-container p,
+  .print-ticket-container h1,
+  .print-ticket-container h2,
+  .print-ticket-container h3,
+  .print-ticket-container h4,
+  .print-ticket-container span,
+  .print-ticket-container ul,
+  .print-ticket-container li {
+    visibility: visible !important;
+  }
+}

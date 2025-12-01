@@ -36,6 +36,8 @@ import { bookingService } from '../../services/bookingService'
 import { formatDate, formatCurrency, formatTime } from '../../utils/helpers'
 import { toast } from 'react-toastify'
 import CancellationRequestModal from '../../components/booking/CancellationRequestModal'
+import jsPDF from 'jspdf'
+import QRCode from 'qrcode'
 
 const MyBookings = () => {
   const [bookings, setBookings] = useState([])
@@ -61,7 +63,7 @@ const MyBookings = () => {
   }
 
   const CANCELLATION_CONFIG = {
-    MIN_HOURS_BEFORE: 48,
+    MIN_HOURS_BEFORE: 3, // Changed from 48 to 3 hours for tiered refund policy
     ENABLED: true
   }
 
@@ -408,15 +410,17 @@ const MyBookings = () => {
       return {
         eligible: false,
         message: 'Cancellation is currently unavailable',
-        requiresOperatorApproval: true
+        requiresOperatorApproval: true,
+        refundPercentage: 0
       }
     }
 
-    if (!['pending', 'upcoming'].includes(displayStatus)) {
+    if (!['pending', 'upcoming', 'confirmed'].includes(displayStatus)) {
       return {
         eligible: false,
         message: 'Cannot cancel completed or cancelled bookings',
-        requiresOperatorApproval: false
+        requiresOperatorApproval: false,
+        refundPercentage: 0
       }
     }
 
@@ -424,7 +428,8 @@ const MyBookings = () => {
       return {
         eligible: false,
         message: 'Missing travel information',
-        requiresOperatorApproval: true
+        requiresOperatorApproval: true,
+        refundPercentage: 0
       }
     }
 
@@ -437,33 +442,66 @@ const MyBookings = () => {
       departure_dateTime.setHours(departureHours, departureMinutes, 0, 0)
       
       const timeDifference = departure_dateTime.getTime() - now.getTime()
+      const hoursUntilDeparture = timeDifference / (60 * 60 * 1000)
       const cancellationDeadlineMs = CANCELLATION_CONFIG.MIN_HOURS_BEFORE * 60 * 60 * 1000
       
       if (timeDifference <= 0) {
         return {
           eligible: false,
           message: 'Departure time has passed',
-          requiresOperatorApproval: false
+          requiresOperatorApproval: false,
+          refundPercentage: 0
         }
       }
 
-      if (timeDifference > cancellationDeadlineMs) {
-        const hoursUntilDeadline = Math.floor((timeDifference - cancellationDeadlineMs) / (60 * 60 * 1000))
-        const daysUntilDeadline = Math.floor(hoursUntilDeadline / 24)
-        const remainingHours = hoursUntilDeadline % 24
-
-        return {
-          eligible: true,
-          message: `Cancel before ${daysUntilDeadline} day${daysUntilDeadline !== 1 ? 's' : ''} ${remainingHours} hour${remainingHours !== 1 ? 's' : ''}`,
-          requiresOperatorApproval: true,
-          deadline: departure_dateTime.getTime() - cancellationDeadlineMs
-        }
+      // Calculate refund percentage based on tiered policy
+      let refundPercentage = 0
+      let refundTier = ''
+      
+      if (hoursUntilDeparture >= 48) {
+        refundPercentage = 100
+        refundTier = '48+ hours - 100% refund'
+      } else if (hoursUntilDeparture >= 24) {
+        refundPercentage = 70
+        refundTier = '24-48 hours - 70% refund'
+      } else if (hoursUntilDeparture >= 6) {
+        refundPercentage = 50
+        refundTier = '6-24 hours - 50% refund'
+      } else if (hoursUntilDeparture >= 3) {
+        refundPercentage = 30
+        refundTier = '3-6 hours - 30% refund'
       } else {
-        const hoursUntilDeparture = Math.floor(timeDifference / (60 * 60 * 1000))
+        // Less than 3 hours - cannot cancel
         return {
           eligible: false,
-          message: `Too late to cancel (${hoursUntilDeparture}h until departure)`,
-          requiresOperatorApproval: false
+          message: `Too late to cancel (${Math.floor(hoursUntilDeparture)}h ${Math.round((hoursUntilDeparture % 1) * 60)}m until departure)`,
+          requiresOperatorApproval: false,
+          refundPercentage: 0
+        }
+      }
+
+      // Can cancel if more than 3 hours before departure
+      if (timeDifference > cancellationDeadlineMs) {
+        const hours = Math.floor(hoursUntilDeparture)
+        const minutes = Math.round((hoursUntilDeparture % 1) * 60)
+        
+        return {
+          eligible: true,
+          message: `${refundPercentage}% refund available (${hours}h ${minutes}m until departure)`,
+          requiresOperatorApproval: true,
+          deadline: departure_dateTime.getTime() - cancellationDeadlineMs,
+          refundPercentage: refundPercentage,
+          refundTier: refundTier,
+          hoursUntilDeparture: hoursUntilDeparture
+        }
+      } else {
+        const hours = Math.floor(hoursUntilDeparture)
+        const minutes = Math.round((hoursUntilDeparture % 1) * 60)
+        return {
+          eligible: false,
+          message: `Too late to cancel (${hours}h ${minutes}m until departure)`,
+          requiresOperatorApproval: false,
+          refundPercentage: 0
         }
       }
       
@@ -472,7 +510,8 @@ const MyBookings = () => {
       return {
         eligible: false,
         message: 'System error calculating cancellation',
-        requiresOperatorApproval: true
+        requiresOperatorApproval: true,
+        refundPercentage: 0
       }
     }
   }
@@ -739,53 +778,255 @@ const MyBookings = () => {
   }
 
   const handleDownloadTicket = async (booking) => {
+    if (!booking) {
+      toast.error('Booking information not available')
+      return
+    }
+    
     try {
-      console.log('🎫 Downloading ticket for:', booking.pnr_number)
-      toast.info('Generating your ticket...')
+      console.log('🎫 Generating PDF ticket for:', booking.pnr_number)
+      toast.info('Generating PDF ticket...')
       
-      const response = await ticketerService.downloadTicket(booking.id)
-      const blob = new Blob([response], { type: 'application/pdf' })
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `ticket-${booking.pnr_number}.pdf`
+      // Get seat numbers as string
+      const seatNumbers = Array.isArray(booking.seat_numbers) 
+        ? booking.seat_numbers.join(', ') 
+        : String(booking.seat_numbers || 'N/A')
       
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
+      // Create PDF
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      })
       
-      window.URL.revokeObjectURL(url)
-      toast.success('Ticket downloaded successfully!')
+      const pageWidth = doc.internal.pageSize.getWidth()
+      const margin = 15
+      const contentWidth = pageWidth - (margin * 2)
+      let yPos = 20
+      
+      // Header with blue background
+      doc.setFillColor(37, 99, 235)
+      doc.rect(0, 0, pageWidth, 35, 'F')
+      
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(24)
+      doc.setFont('helvetica', 'bold')
+      doc.text('BUS TICKET', pageWidth / 2, 15, { align: 'center' })
+      
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'normal')
+      doc.text('E-Ticket Confirmation', pageWidth / 2, 23, { align: 'center' })
+      
+      doc.setFontSize(10)
+      doc.text(`PNR: ${booking.pnr_number || 'N/A'}`, pageWidth - margin, 30, { align: 'right' })
+      
+      yPos = 45
+      doc.setTextColor(0, 0, 0)
+      
+      // Journey Route
+      doc.setFillColor(248, 250, 252)
+      doc.rect(margin, yPos - 5, contentWidth, 25, 'F')
+      
+      doc.setFontSize(18)
+      doc.setFont('helvetica', 'bold')
+      const fromCity = booking.departure_city || 'N/A'
+      const toCity = booking.arrival_city || 'N/A'
+      
+      doc.text(fromCity, pageWidth / 2 - 30, yPos + 8, { align: 'right' })
+      doc.setFontSize(14)
+      doc.setFont('helvetica', 'normal')
+      doc.text('to', pageWidth / 2, yPos + 8, { align: 'center' })
+      doc.setFontSize(18)
+      doc.setFont('helvetica', 'bold')
+      doc.text(toCity, pageWidth / 2 + 30, yPos + 8, { align: 'left' })
+      
+      yPos += 30
+      
+      // Passenger & Journey Details
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text('PASSENGER & JOURNEY DETAILS', margin, yPos)
+      yPos += 8
+      
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      
+      const details = [
+        ['Passenger Name:', booking.passenger_name || 'N/A'],
+        ['Phone Number:', booking.passenger_phone || 'N/A'],
+        ...(booking.passenger_email ? [['Email:', booking.passenger_email]] : []),
+        ['Travel Date:', formatDate(booking.travel_date) || 'N/A'],
+        ['Departure Time:', formatTime(booking.departure_time) || 'N/A'],
+        ['Seat Number(s):', seatNumbers]
+      ]
+      
+      details.forEach(([label, value]) => {
+        doc.setFont('helvetica', 'bold')
+        doc.text(label, margin, yPos)
+        doc.setFont('helvetica', 'normal')
+        doc.text(value, margin + 45, yPos)
+        yPos += 6
+      })
+      
+      yPos += 5
+      
+      // Bus Details
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text('BUS DETAILS', margin, yPos)
+      yPos += 8
+      
+      doc.setFillColor(241, 245, 249)
+      doc.rect(margin, yPos - 5, contentWidth, 28, 'F')
+      
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      
+      const busDetails = [
+        ['Bus Type:', booking.bus_type || 'N/A'],
+        ['Bus Number:', booking.bus_number || 'N/A'],
+        ['Operator:', booking.bus_company || 'Bus Service'],
+        ['Baggage:', booking.has_baggage ? `${booking.baggage_weight || 15}kg` : 'No baggage']
+      ]
+      
+      busDetails.forEach(([label, value]) => {
+        doc.setFont('helvetica', 'bold')
+        doc.text(label, margin + 5, yPos)
+        doc.setFont('helvetica', 'normal')
+        doc.text(value, margin + 35, yPos)
+        yPos += 6
+      })
+      
+      yPos += 8
+      
+      // Payment Details
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text('PAYMENT DETAILS', margin, yPos)
+      yPos += 8
+      
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      
+      const paymentDetails = [
+        ['Total Amount:', formatCurrency(booking.total_amount) || 'N/A'],
+        ['Payment Status:', (booking.payment_status || 'Paid').toUpperCase()],
+        ['Booking Date:', formatDate(booking.created_at) || 'N/A']
+      ]
+      
+      paymentDetails.forEach(([label, value]) => {
+        doc.setFont('helvetica', 'bold')
+        doc.text(label, margin, yPos)
+        doc.setFont('helvetica', 'normal')
+        if (label === 'Total Amount:') {
+          doc.setTextColor(22, 163, 74)
+        }
+        doc.text(value, margin + 45, yPos)
+        doc.setTextColor(0, 0, 0)
+        yPos += 6
+      })
+      
+      yPos += 5
+      
+      // Generate QR Code
+      try {
+        const qrData = JSON.stringify({
+          pnr: booking.pnr_number,
+          passenger: booking.passenger_name,
+          from: booking.departure_city,
+          to: booking.arrival_city,
+          date: booking.travel_date,
+          time: booking.departure_time,
+          seats: seatNumbers,
+          bookingId: booking.id || booking._id
+        })
+        
+        const qrCodeDataUrl = await QRCode.toDataURL(qrData, {
+          width: 200,
+          margin: 1,
+          color: {
+            dark: '#000000',
+            light: '#FFFFFF'
+          }
+        })
+        
+        const qrSize = 35
+        const qrX = (pageWidth - qrSize) / 2
+        doc.addImage(qrCodeDataUrl, 'PNG', qrX, yPos, qrSize, qrSize)
+        
+        doc.setFontSize(8)
+        doc.setFont('helvetica', 'bold')
+        doc.text(booking.pnr_number || 'N/A', pageWidth / 2, yPos + qrSize + 5, { align: 'center' })
+        doc.setFontSize(7)
+        doc.setFont('helvetica', 'normal')
+        doc.text('Scan QR code for verification', pageWidth / 2, yPos + qrSize + 9, { align: 'center' })
+        
+        yPos += qrSize + 12
+      } catch (qrError) {
+        console.warn('QR code generation failed:', qrError)
+        yPos += 5
+      }
+      
+      // Dashed line separator
+      doc.setLineDash([2, 2])
+      doc.setDrawColor(203, 213, 225)
+      doc.line(margin, yPos, pageWidth - margin, yPos)
+      doc.setLineDash([])
+      
+      yPos += 8
+      
+      // Important Instructions
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'bold')
+      doc.text('IMPORTANT INSTRUCTIONS', margin, yPos)
+      yPos += 7
+      
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'normal')
+      
+      const instructions = [
+        '• Arrive at boarding point 30 minutes before departure',
+        '• Carry valid government-issued photo ID',
+        '• Present this ticket (printed or digital) at boarding',
+        `• Baggage allowance: ${booking.has_baggage ? `${booking.baggage_weight || 15}kg` : 'No baggage'}`,
+        `• For queries, contact support with PNR: ${booking.pnr_number}`
+      ]
+      
+      instructions.forEach(instruction => {
+        doc.text(instruction, margin + 2, yPos)
+        yPos += 5
+      })
+      
+      yPos += 5
+      
+      // Footer
+      doc.setDrawColor(226, 232, 240)
+      doc.line(margin, yPos, pageWidth - margin, yPos)
+      yPos += 6
+      
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'italic')
+      doc.setTextColor(100, 116, 139)
+      doc.text('Thank you for choosing our service. Have a safe journey!', pageWidth / 2, yPos, { align: 'center' })
+      yPos += 5
+      doc.setFontSize(7)
+      doc.text('This is a computer-generated ticket. No signature required.', pageWidth / 2, yPos, { align: 'center' })
+      yPos += 4
+      doc.text(`Booking Reference: ${(booking.id || booking._id).slice(-12)}`, pageWidth / 2, yPos, { align: 'center' })
+      yPos += 4
+      doc.text(`Generated on: ${new Date().toLocaleString()}`, pageWidth / 2, yPos, { align: 'center' })
+      
+      // Save PDF
+      const filename = `Ticket-${booking.pnr_number}-${booking.departure_city}-${booking.arrival_city}.pdf`
+      doc.save(filename)
+      
+      console.log('✅ PDF generated successfully')
+      toast.success('PDF ticket downloaded successfully!')
       
     } catch (error) {
-      console.error('❌ Ticket download failed:', error)
-      generateSimpleTicket(booking)
+      console.error('❌ PDF generation error:', error)
+      toast.error(`Failed to generate PDF: ${error.message}`)
     }
-  }
-
-  const generateSimpleTicket = (booking) => {
-    const ticketContent = `
-      TICKET - ${booking.pnr_number}
-      Route: ${booking.departure_city} → ${booking.arrival_city}
-      Date: ${formatDate(booking.travel_date)}
-      Time: ${formatTime(booking.departure_time)}
-      Passenger: ${booking.passenger_name}
-      Seats: ${Array.isArray(booking.seat_numbers) ? booking.seat_numbers.join(', ') : booking.seat_numbers}
-      Amount: ${formatCurrency(booking.total_amount || booking.base_fare || 0)}
-    `
-    
-    const blob = new Blob([ticketContent], { type: 'text/plain' })
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `ticket-${booking.pnr_number}.txt`
-    
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    
-    window.URL.revokeObjectURL(url)
-    toast.success('Simple ticket downloaded!')
   }
 
   const getBusAmenities = (booking) => {
@@ -1265,18 +1506,39 @@ const MyBookings = () => {
                             {/* Cancellation Status */}
                             <div className={`p-4 rounded-lg border ${
                               booking.cancellationInfo?.eligible 
-                                ? 'bg-yellow-50 border-yellow-200' 
+                                ? booking.cancellationInfo.refundPercentage === 100 
+                                  ? 'bg-green-50 border-green-200'
+                                  : booking.cancellationInfo.refundPercentage >= 50
+                                  ? 'bg-blue-50 border-blue-200'
+                                  : 'bg-yellow-50 border-yellow-200'
                                 : 'bg-gray-50 border-gray-200'
                             }`}>
                               <div className="flex items-center space-x-3">
                                 <AlertCircle className={`h-5 w-5 ${
-                                  booking.cancellationInfo?.eligible ? 'text-yellow-600' : 'text-gray-400'
+                                  booking.cancellationInfo?.eligible 
+                                    ? booking.cancellationInfo.refundPercentage === 100
+                                      ? 'text-green-600'
+                                      : booking.cancellationInfo.refundPercentage >= 50
+                                      ? 'text-blue-600'
+                                      : 'text-yellow-600'
+                                    : 'text-gray-400'
                                 }`} />
-                                <div>
+                                <div className="flex-1">
                                   <h4 className="font-semibold text-gray-900 text-sm">Cancellation</h4>
                                   <p className="text-sm text-gray-600 mt-1">
                                     {booking.cancellationInfo?.message || 'Not available'}
                                   </p>
+                                  {booking.cancellationInfo?.eligible && booking.cancellationInfo?.refundPercentage > 0 && (
+                                    <div className={`mt-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${
+                                      booking.cancellationInfo.refundPercentage === 100
+                                        ? 'bg-green-100 text-green-700'
+                                        : booking.cancellationInfo.refundPercentage >= 50
+                                        ? 'bg-blue-100 text-blue-700'
+                                        : 'bg-yellow-100 text-yellow-700'
+                                    }`}>
+                                      {booking.cancellationInfo.refundPercentage}% Refund
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             </div>

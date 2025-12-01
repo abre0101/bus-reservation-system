@@ -1,11 +1,13 @@
 import React, { useState } from 'react'
-import { X, AlertCircle, Send, Clock } from 'lucide-react'
+import { X, AlertCircle, Send, Clock, Info, DollarSign } from 'lucide-react'
 import { bookingService } from '../../services/bookingService'
 import { toast } from 'react-toastify'
+import { calculateHoursUntilDeparture, getRefundTier, calculateRefundAmount } from '../../utils/cancellationPolicy'
 
 const CancellationRequestModal = ({ booking, onClose, onSuccess, isOpen }) => {
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [showPolicy, setShowPolicy] = useState(false)
 
   // Calculate days until departure - with null safety
   const getDaysUntilDeparture = () => {
@@ -121,44 +123,100 @@ const CancellationRequestModal = ({ booking, onClose, onSuccess, isOpen }) => {
             </div>
           </div>
 
-          {/* Time Until Departure */}
-          {timeInfo && (
-            <div className={`border-2 rounded-xl p-4 ${
-              timeInfo.total_hours >= 48 
-                ? 'bg-green-50 border-green-300' 
-                : 'bg-yellow-50 border-yellow-300'
-            }`}>
-              <div className="flex items-center space-x-2 mb-2">
-                <Clock className={`h-5 w-5 ${
-                  timeInfo.total_hours >= 48 ? 'text-green-600' : 'text-yellow-600'
-                }`} />
-                <h3 className={`font-semibold ${
-                  timeInfo.total_hours >= 48 ? 'text-green-900' : 'text-yellow-900'
-                }`}>
-                  Time Until Departure
-                </h3>
+          {/* Refund Information */}
+          {timeInfo && (() => {
+            const hoursUntil = calculateHoursUntilDeparture(booking.travel_date, booking.departure_time)
+            const refundTier = getRefundTier(hoursUntil)
+            const refundDetails = calculateRefundAmount(booking.total_amount, refundTier.percentage)
+            
+            return (
+              <div className={`border-2 rounded-xl p-4 ${refundTier.bgColor} ${refundTier.borderColor}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center space-x-2">
+                    <DollarSign className={`h-5 w-5 ${refundTier.textColor}`} />
+                    <h3 className={`font-semibold ${refundTier.textColor}`}>
+                      {refundTier.percentage}% Refund Available
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowPolicy(!showPolicy)}
+                    className={`flex items-center space-x-1 px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                      refundTier.percentage === 100 
+                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                        : refundTier.percentage >= 50
+                        ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                        : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                    }`}
+                  >
+                    <Info className="h-4 w-4" />
+                    <span>{showPolicy ? 'Hide' : 'View'} Policy</span>
+                  </button>
+                </div>
+                
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2 text-sm">
+                    <Clock className={`h-4 w-4 ${refundTier.textColor}`} />
+                    <span className={refundTier.textColor}>
+                      {timeInfo.days} days, {timeInfo.hours} hours until departure
+                    </span>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-gray-200">
+                    <div>
+                      <p className="text-xs text-gray-600">Expected Refund</p>
+                      <p className="text-lg font-bold text-green-600">
+                        {refundDetails.refundAmount.toFixed(2)} ETB
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-600">Cancellation Fee</p>
+                      <p className="text-lg font-bold text-gray-700">
+                        {refundDetails.cancellationFee.toFixed(2)} ETB
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <p className={`text-sm ${refundTier.textColor} mt-2`}>
+                    {refundTier.message}
+                  </p>
+                </div>
+                
+                {/* Refund Policy Details */}
+                {showPolicy && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <h4 className="font-semibold text-gray-900 mb-3 text-sm">Tiered Refund Policy</h4>
+                    <div className="space-y-2">
+                      {[
+                        { time: '48+ hours', percent: 100, color: 'text-green-600' },
+                        { time: '24-48 hours', percent: 70, color: 'text-blue-600' },
+                        { time: '6-24 hours', percent: 50, color: 'text-yellow-600' },
+                        { time: '3-6 hours', percent: 30, color: 'text-orange-600' },
+                        { time: 'Less than 3h', percent: 0, color: 'text-red-600' }
+                      ].map((tier, idx) => (
+                        <div key={idx} className="flex justify-between items-center text-sm">
+                          <span className="text-gray-600">{tier.time} before:</span>
+                          <span className={`font-semibold ${tier.color}`}>
+                            {tier.percent === 0 ? 'Not allowed' : `${tier.percent}% refund`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-              <p className={`text-lg font-bold ${
-                timeInfo.total_hours >= 48 ? 'text-green-700' : 'text-yellow-700'
-              }`}>
-                {timeInfo.days} days, {timeInfo.hours} hours
-              </p>
-              {timeInfo.total_hours < 48 && (
-                <p className="text-yellow-700 text-sm mt-2">
-                  ⚠️ Cancellation requests should be made at least 2 days before departure
-                </p>
-              )}
-            </div>
-          )}
+            )
+          })()}
 
           {/* Important Notice */}
-          <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
             <div className="flex items-start space-x-3">
-              <AlertCircle className="h-5 w-5 text-orange-600 mt-0.5 flex-shrink-0" />
+              <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
               <div>
-                <h3 className="font-semibold text-orange-900 mb-2">Important Information</h3>
-                <ul className="text-sm text-orange-800 space-y-1">
-                  <li>• Cancellation requests must be made at least 2 days before departure</li>
+                <h3 className="font-semibold text-blue-900 mb-2">Important Information</h3>
+                <ul className="text-sm text-blue-800 space-y-1">
+                  <li>• Cancellation must be requested at least 3 hours before departure</li>
+                  <li>• Refund percentage depends on time until departure (see policy above)</li>
                   <li>• An operator will review your request within 24 hours</li>
                   <li>• Refunds will be processed to your original payment method</li>
                   <li>• You will be notified via SMS/Email about the decision</li>

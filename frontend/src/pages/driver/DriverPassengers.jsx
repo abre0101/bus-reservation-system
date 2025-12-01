@@ -45,7 +45,21 @@ const DriverPassengers = () => {
     }
   }
 
-  const handleCheckIn = async (bookingId) => {
+  const handleCheckIn = async (bookingId, passenger) => {
+    // Check if check-in is available
+    if (!passenger.can_checkin) {
+      alert(passenger.checkin_message || 'Check-in not available yet')
+      return
+    }
+
+    // Show warning for late check-in
+    if (passenger.checkin_status === 'late') {
+      const confirmed = window.confirm(
+        `${passenger.checkin_message}\n\nDo you want to proceed with check-in?`
+      )
+      if (!confirmed) return
+    }
+
     try {
       await api.post(`/driver/trips/${selectedTrip}/checkin`, {
         booking_id: bookingId
@@ -171,21 +185,34 @@ const DriverPassengers = () => {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          passenger.status === 'checked_in'
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-orange-100 text-orange-800'
-                        }`}>
-                          {passenger.status === 'checked_in' ? '✅ Checked In' : '⏳ Pending'}
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold w-fit ${
+                            passenger.status === 'checked_in'
+                              ? 'bg-green-100 text-green-800'
+                              : passenger.can_checkin
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-orange-100 text-orange-800'
+                          }`}>
+                            {passenger.status === 'checked_in' ? '✅ Checked In' : passenger.can_checkin ? '✓ Ready' : '⏳ Pending'}
+                          </span>
+                          {passenger.checkin_message && passenger.status !== 'checked_in' && (
+                            <span className="text-xs text-gray-600">{passenger.checkin_message}</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         {passenger.status !== 'checked_in' && (
                           <button
-                            onClick={() => handleCheckIn(passenger._id)}
-                            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                            onClick={() => handleCheckIn(passenger._id, passenger)}
+                            disabled={!passenger.can_checkin}
+                            className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium ${
+                              passenger.can_checkin
+                                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                            }`}
+                            title={passenger.can_checkin ? 'Check in passenger' : passenger.checkin_message}
                           >
-                            Check In
+                            {passenger.can_checkin ? 'Check In' : 'Not Available'}
                           </button>
                         )}
                       </td>

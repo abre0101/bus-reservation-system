@@ -20,12 +20,18 @@ import {
   AlertCircle,
   CheckCircle,
   XCircle,
-  RefreshCw
+  RefreshCw,
+  Ban
 } from 'lucide-react'
 import { bookingService, debugBookingAccess } from '../../services/bookingService'
 import { formatDate, formatCurrency, formatTime } from '../../utils/helpers'
 import { toast } from 'react-toastify'
 import LiveTrackingCard from '../../components/tracking/LiveTrackingCard'
+import CancellationModal from '../../components/booking/CancellationModal'
+import '../../styles/PrintTicket.css'
+import jsPDF from 'jspdf'
+import QRCode from 'qrcode'
+import { QRCodeSVG } from 'qrcode.react'
 
 const BookingDetails = () => {
   const { bookingId } = useParams()
@@ -36,6 +42,8 @@ const BookingDetails = () => {
   const [refreshing, setRefreshing] = useState(false)
   const [journeyProgress, setJourneyProgress] = useState(0)
   const [journeyStatus, setJourneyStatus] = useState('not_started') // not_started, in_progress, completed
+  const [showCancellationModal, setShowCancellationModal] = useState(false)
+  const [isSubmittingCancellation, setIsSubmittingCancellation] = useState(false)
 
   useEffect(() => {
     loadBookingDetails()
@@ -279,19 +287,311 @@ const BookingDetails = () => {
   }
 
   const handlePrintTicket = () => {
-    window.print()
+    // Ensure the print ticket element exists
+    const printTicket = document.getElementById('print-ticket')
+    if (!printTicket) {
+      console.error('Print ticket element not found')
+      toast.error('Unable to print ticket. Please try again.')
+      return
+    }
+    
+    console.log('Print ticket found, opening print dialog...')
+    
+    // Small delay to ensure rendering is complete
+    setTimeout(() => {
+      window.print()
+    }, 100)
   }
 
   const handleDownloadTicket = async () => {
-    if (!booking?.id) return
+    if (!booking) {
+      toast.error('Booking information not available')
+      return
+    }
     
     try {
-      toast.info('Preparing your ticket download...')
-      // You'll need to implement downloadTicket in your service
-      // await ticketService.downloadTicket(booking.id)
-      toast.success('Ticket downloaded successfully!')
+      console.log('Starting PDF ticket generation...')
+      toast.info('Generating PDF ticket...')
+      
+      // Get seat numbers as string
+      const seatNumbers = Array.isArray(booking.seat_numbers) 
+        ? booking.seat_numbers.join(', ') 
+        : String(booking.seat_numbers || 'N/A')
+      
+      // Create PDF
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      })
+      
+      const pageWidth = doc.internal.pageSize.getWidth()
+      const margin = 15
+      const contentWidth = pageWidth - (margin * 2)
+      let yPos = 20
+      
+      // Helper function to add text
+      const addText = (text, size, style = 'normal', align = 'left', color = [0, 0, 0]) => {
+        doc.setFontSize(size)
+        doc.setFont('helvetica', style)
+        doc.setTextColor(...color)
+        if (align === 'center') {
+          doc.text(text, pageWidth / 2, yPos, { align: 'center' })
+        } else if (align === 'right') {
+          doc.text(text, pageWidth - margin, yPos, { align: 'right' })
+        } else {
+          doc.text(text, margin, yPos)
+        }
+        yPos += size * 0.5
+      }
+      
+      // Header with blue background
+      doc.setFillColor(37, 99, 235) // Blue color
+      doc.rect(0, 0, pageWidth, 35, 'F')
+      
+      doc.setTextColor(255, 255, 255) // White text
+      doc.setFontSize(24)
+      doc.setFont('helvetica', 'bold')
+      doc.text('BUS TICKET', pageWidth / 2, 15, { align: 'center' })
+      
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'normal')
+      doc.text('E-Ticket Confirmation', pageWidth / 2, 23, { align: 'center' })
+      
+      doc.setFontSize(10)
+      doc.text(`PNR: ${booking.pnr_number || 'N/A'}`, pageWidth - margin, 30, { align: 'right' })
+      
+      yPos = 45
+      doc.setTextColor(0, 0, 0) // Reset to black
+      
+      // Journey Route - Large Display
+      doc.setFillColor(248, 250, 252)
+      doc.rect(margin, yPos - 5, contentWidth, 25, 'F')
+      
+      doc.setFontSize(18)
+      doc.setFont('helvetica', 'bold')
+      const fromCity = booking.departure_city || 'N/A'
+      const toCity = booking.arrival_city || 'N/A'
+      
+      // Display route with "to" instead of arrow symbol
+      doc.text(fromCity, pageWidth / 2 - 30, yPos + 8, { align: 'right' })
+      doc.setFontSize(14)
+      doc.setFont('helvetica', 'normal')
+      doc.text('to', pageWidth / 2, yPos + 8, { align: 'center' })
+      doc.setFontSize(18)
+      doc.setFont('helvetica', 'bold')
+      doc.text(toCity, pageWidth / 2 + 30, yPos + 8, { align: 'left' })
+      
+      yPos += 30
+      
+      // Passenger & Journey Details
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text('PASSENGER & JOURNEY DETAILS', margin, yPos)
+      yPos += 8
+      
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      
+      const details = [
+        ['Passenger Name:', booking.passenger_name || 'N/A'],
+        ['Phone Number:', booking.passenger_phone || 'N/A'],
+        ...(booking.passenger_email ? [['Email:', booking.passenger_email]] : []),
+        ['Travel Date:', formatDate(booking.travel_date) || 'N/A'],
+        ['Departure Time:', formatTime(booking.departure_time) || 'N/A'],
+        ['Seat Number(s):', seatNumbers]
+      ]
+      
+      details.forEach(([label, value]) => {
+        doc.setFont('helvetica', 'bold')
+        doc.text(label, margin, yPos)
+        doc.setFont('helvetica', 'normal')
+        doc.text(value, margin + 45, yPos)
+        yPos += 6
+      })
+      
+      yPos += 5
+      
+      // Bus Details
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text('BUS DETAILS', margin, yPos)
+      yPos += 8
+      
+      doc.setFillColor(241, 245, 249)
+      doc.rect(margin, yPos - 5, contentWidth, 28, 'F')
+      
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      
+      const busDetails = [
+        ['Bus Type:', booking.bus_type || 'N/A'],
+        ['Bus Number:', booking.bus_number || 'N/A'],
+        ['Operator:', booking.bus_company || 'Bus Service'],
+        ['Baggage:', booking.has_baggage ? `${booking.baggage_weight || 15}kg` : 'No baggage']
+      ]
+      
+      busDetails.forEach(([label, value]) => {
+        doc.setFont('helvetica', 'bold')
+        doc.text(label, margin + 5, yPos)
+        doc.setFont('helvetica', 'normal')
+        doc.text(value, margin + 35, yPos)
+        yPos += 6
+      })
+      
+      yPos += 8
+      
+      // Payment Details
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text('PAYMENT DETAILS', margin, yPos)
+      yPos += 8
+      
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      
+      const paymentDetails = [
+        ['Total Amount:', formatCurrency(booking.total_amount) || 'N/A'],
+        ['Payment Status:', (booking.payment_status || 'Paid').toUpperCase()],
+        ['Booking Date:', formatDate(booking.created_at) || 'N/A']
+      ]
+      
+      paymentDetails.forEach(([label, value]) => {
+        doc.setFont('helvetica', 'bold')
+        doc.text(label, margin, yPos)
+        doc.setFont('helvetica', 'normal')
+        if (label === 'Total Amount:') {
+          doc.setTextColor(22, 163, 74) // Green for amount
+        }
+        doc.text(value, margin + 45, yPos)
+        doc.setTextColor(0, 0, 0) // Reset to black
+        yPos += 6
+      })
+      
+      yPos += 5
+      
+      // Generate QR Code
+      try {
+        const qrData = JSON.stringify({
+          pnr: booking.pnr_number,
+          passenger: booking.passenger_name,
+          from: booking.departure_city,
+          to: booking.arrival_city,
+          date: booking.travel_date,
+          time: booking.departure_time,
+          seats: seatNumbers,
+          bookingId: booking.id || booking._id
+        })
+        
+        // Generate QR code as data URL
+        const qrCodeDataUrl = await QRCode.toDataURL(qrData, {
+          width: 200,
+          margin: 1,
+          color: {
+            dark: '#000000',
+            light: '#FFFFFF'
+          }
+        })
+        
+        // Add QR code to PDF
+        const qrSize = 35
+        const qrX = (pageWidth - qrSize) / 2
+        doc.addImage(qrCodeDataUrl, 'PNG', qrX, yPos, qrSize, qrSize)
+        
+        doc.setFontSize(8)
+        doc.setFont('helvetica', 'bold')
+        doc.text(booking.pnr_number || 'N/A', pageWidth / 2, yPos + qrSize + 5, { align: 'center' })
+        doc.setFontSize(7)
+        doc.setFont('helvetica', 'normal')
+        doc.text('Scan QR code for verification', pageWidth / 2, yPos + qrSize + 9, { align: 'center' })
+        
+        yPos += qrSize + 12
+      } catch (qrError) {
+        console.warn('QR code generation failed, using barcode fallback:', qrError)
+        
+        // Fallback: Draw barcode simulation
+        doc.setFillColor(255, 255, 255)
+        doc.rect(margin, yPos, contentWidth, 20, 'F')
+        doc.setDrawColor(226, 232, 240)
+        doc.rect(margin, yPos, contentWidth, 20, 'S')
+        
+        // Draw barcode lines
+        const barcodeY = yPos + 5
+        const barcodeHeight = 10
+        const barcodeStartX = margin + 20
+        for (let i = 0; i < 40; i++) {
+          const x = barcodeStartX + (i * 3)
+          const height = barcodeHeight * (0.6 + Math.random() * 0.4)
+          doc.setFillColor(0, 0, 0)
+          doc.rect(x, barcodeY + (barcodeHeight - height), 2, height, 'F')
+        }
+        
+        doc.setFontSize(8)
+        doc.setFont('helvetica', 'bold')
+        doc.text(booking.pnr_number || 'N/A', pageWidth / 2, yPos + 18, { align: 'center' })
+        
+        yPos += 25
+      }
+      
+      // Dashed line separator
+      doc.setLineDash([2, 2])
+      doc.setDrawColor(203, 213, 225)
+      doc.line(margin, yPos, pageWidth - margin, yPos)
+      doc.setLineDash([])
+      
+      yPos += 8
+      
+      // Important Instructions
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'bold')
+      doc.text('IMPORTANT INSTRUCTIONS', margin, yPos)
+      yPos += 7
+      
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'normal')
+      
+      const instructions = [
+        '• Arrive at boarding point 30 minutes before departure',
+        '• Carry valid government-issued photo ID',
+        '• Present this ticket (printed or digital) at boarding',
+        `• Baggage allowance: ${booking.has_baggage ? `${booking.baggage_weight || 15}kg` : 'No baggage'}`,
+        `• For queries, contact support with PNR: ${booking.pnr_number}`
+      ]
+      
+      instructions.forEach(instruction => {
+        doc.text(instruction, margin + 2, yPos)
+        yPos += 5
+      })
+      
+      yPos += 5
+      
+      // Footer
+      doc.setDrawColor(226, 232, 240)
+      doc.line(margin, yPos, pageWidth - margin, yPos)
+      yPos += 6
+      
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'italic')
+      doc.setTextColor(100, 116, 139)
+      doc.text('Thank you for choosing our service. Have a safe journey!', pageWidth / 2, yPos, { align: 'center' })
+      yPos += 5
+      doc.setFontSize(7)
+      doc.text('This is a computer-generated ticket. No signature required.', pageWidth / 2, yPos, { align: 'center' })
+      yPos += 4
+      doc.text(`Booking Reference: ${(booking.id || booking._id).slice(-12)}`, pageWidth / 2, yPos, { align: 'center' })
+      yPos += 4
+      doc.text(`Generated on: ${new Date().toLocaleString()}`, pageWidth / 2, yPos, { align: 'center' })
+      
+      // Save PDF
+      const filename = `Ticket-${booking.pnr_number}-${booking.departure_city}-${booking.arrival_city}.pdf`
+      doc.save(filename)
+      
+      console.log('PDF generated successfully')
+      toast.success('PDF ticket downloaded successfully!')
+      
     } catch (error) {
-      toast.error('Failed to download ticket')
+      console.error('PDF generation error:', error)
+      toast.error(`Failed to generate PDF: ${error.message}`)
     }
   }
 
@@ -303,6 +603,29 @@ const BookingDetails = () => {
     loadBookingDetails()
   }
 
+  const handleCancellationRequest = async (reason) => {
+    setIsSubmittingCancellation(true)
+    try {
+      const response = await bookingService.requestCancellation(bookingId, reason)
+      toast.success(response.message || 'Cancellation request submitted successfully')
+      setShowCancellationModal(false)
+      // Reload booking details to show updated status
+      await loadBookingDetails()
+    } catch (error) {
+      console.error('Error requesting cancellation:', error)
+      toast.error(error.message || 'Failed to submit cancellation request')
+    } finally {
+      setIsSubmittingCancellation(false)
+    }
+  }
+
+  const canRequestCancellation = () => {
+    // Can request cancellation if booking is confirmed and not already cancelled or completed
+    return booking?.status === 'confirmed' && 
+           !booking?.cancellation_requested &&
+           isUpcoming()
+  }
+
   // Check if booking is upcoming
   const isUpcoming = () => {
     if (!booking?.travel_date) return false
@@ -311,6 +634,31 @@ const BookingDetails = () => {
     today.setHours(0, 0, 0, 0)
     travelDate.setHours(0, 0, 0, 0)
     return travelDate >= today
+  }
+
+  // Check if check-in is available (within 24 hours before departure)
+  const isCheckinAvailable = () => {
+    if (!booking?.travel_date || !booking?.departure_time) return false
+    
+    try {
+      const now = new Date()
+      const travelDate = new Date(booking.travel_date)
+      const [hours, minutes] = booking.departure_time.split(':').map(Number)
+      
+      // Create departure datetime
+      const departureDateTime = new Date(travelDate)
+      departureDateTime.setHours(hours, minutes, 0, 0)
+      
+      // Calculate time difference in hours
+      const timeDifferenceMs = departureDateTime - now
+      const timeDifferenceHours = timeDifferenceMs / (1000 * 60 * 60)
+      
+      // Check-in available if within 24 hours before departure and not yet departed
+      return timeDifferenceHours > 0 && timeDifferenceHours <= 24
+    } catch (error) {
+      console.error('Error checking check-in availability:', error)
+      return false
+    }
   }
 
   if (loading) {
@@ -448,8 +796,8 @@ const BookingDetails = () => {
           </div>
 
           <div className="p-8">
-            {/* Estimated Arrival Banner with Journey Progress */}
-            {booking.estimated_arrival && (
+            {/* Estimated Arrival Banner with Journey Progress - Only show when journey has started */}
+            {booking.estimated_arrival && journeyStatus !== 'not_started' && (
               <div className={`rounded-xl p-6 mb-8 text-white shadow-lg transition-all duration-500 ${
                 journeyStatus === 'completed' ? 'bg-gradient-to-r from-green-500 to-emerald-600' :
                 journeyStatus === 'in_progress' ? 'bg-gradient-to-r from-orange-500 to-red-600' :
@@ -567,7 +915,7 @@ const BookingDetails = () => {
                       {formatTime(booking.arrival_time) || 'N/A'}
                     </span>
                   </div>
-                  {booking.estimated_arrival && (
+                  {booking.estimated_arrival && journeyStatus !== 'not_started' && (
                     <div className="flex justify-between items-center py-2 border-b border-gray-200 bg-blue-50 -mx-6 px-6">
                       <span className="text-blue-700 font-medium flex items-center space-x-1">
                         <Clock className="h-4 w-4" />
@@ -762,7 +1110,7 @@ const BookingDetails = () => {
                 <Download className="h-5 w-5" />
                 <span>Download Ticket</span>
               </button>
-              {upcoming && booking.status === 'confirmed' && (
+              {upcoming && booking.status === 'confirmed' && isCheckinAvailable() && (
                 <Link
                   to="/customer/checkin"
                   state={{ booking }}
@@ -771,6 +1119,27 @@ const BookingDetails = () => {
                   <CheckCircle className="h-5 w-5" />
                   <span>Check-in Online</span>
                 </Link>
+              )}
+              {upcoming && booking.status === 'confirmed' && !isCheckinAvailable() && (
+                <div className="flex items-center justify-center space-x-2 px-6 py-3 bg-gray-300 text-gray-600 rounded-lg cursor-not-allowed text-center">
+                  <Clock className="h-5 w-5" />
+                  <span>Check-in opens 24h before departure</span>
+                </div>
+              )}
+              {canRequestCancellation() && (
+                <button
+                  onClick={() => setShowCancellationModal(true)}
+                  className="flex items-center justify-center space-x-2 px-6 py-3 bg-white border-2 border-red-600 text-red-600 rounded-lg hover:bg-red-50 transition-all duration-200 font-semibold shadow-sm hover:shadow-md"
+                >
+                  <Ban className="h-5 w-5" />
+                  <span>Request Cancellation</span>
+                </button>
+              )}
+              {booking?.cancellation_requested && (
+                <div className="flex items-center justify-center space-x-2 px-6 py-3 bg-yellow-100 text-yellow-700 rounded-lg border-2 border-yellow-300 text-center">
+                  <AlertCircle className="h-5 w-5" />
+                  <span>Cancellation Pending Review</span>
+                </div>
               )}
             </div>
           </div>
@@ -832,6 +1201,196 @@ const BookingDetails = () => {
           </div>
         )}
       </div>
+
+      {/* Cancellation Modal */}
+      {showCancellationModal && (
+        <CancellationModal
+          booking={booking}
+          onClose={() => setShowCancellationModal(false)}
+          onConfirm={handleCancellationRequest}
+          isSubmitting={isSubmittingCancellation}
+        />
+      )}
+
+      {/* Print-Only Ticket Layout */}
+      {booking && (
+        <div id="print-ticket" className="print-ticket-container">
+          <div className="ticket-border" style={{ border: '3px solid #2563eb', borderRadius: '12px', overflow: 'hidden' }}>
+            {/* Ticket Header */}
+            <div className="ticket-header" style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)', padding: '20px', color: 'white' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h1 style={{ fontSize: '24px', fontWeight: 'bold', margin: '0 0 8px 0' }}>BUS TICKET</h1>
+                  <p style={{ fontSize: '14px', margin: 0, opacity: 0.9 }}>E-Ticket Confirmation</p>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '12px', opacity: 0.9, marginBottom: '4px' }}>PNR Number</div>
+                  <div style={{ fontSize: '20px', fontWeight: 'bold', fontFamily: 'monospace', letterSpacing: '2px' }}>
+                    {booking.pnr_number}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Main Ticket Body */}
+            <div style={{ padding: '30px' }}>
+              {/* Journey Route - Large Display */}
+              <div style={{ textAlign: 'center', marginBottom: '20px', padding: '20px', background: '#f8fafc', borderRadius: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '20px' }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#1e293b' }}>{booking.departure_city}</div>
+                    <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>FROM</div>
+                  </div>
+                  <div style={{ fontSize: '32px', color: '#2563eb' }}>→</div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#1e293b' }}>{booking.arrival_city}</div>
+                    <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>TO</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Passenger & Journey Details */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '25px' }}>
+                {/* Left Column */}
+                <div>
+                  <div style={{ marginBottom: '15px' }}>
+                    <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Passenger Name</div>
+                    <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#1e293b' }}>{booking.passenger_name}</div>
+                  </div>
+                  <div style={{ marginBottom: '15px' }}>
+                    <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Phone Number</div>
+                    <div style={{ fontSize: '14px', fontWeight: '600', color: '#1e293b' }}>{booking.passenger_phone}</div>
+                  </div>
+                  {booking.passenger_email && (
+                    <div style={{ marginBottom: '15px' }}>
+                      <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Email</div>
+                      <div style={{ fontSize: '13px', color: '#1e293b' }}>{booking.passenger_email}</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right Column */}
+                <div>
+                  <div style={{ marginBottom: '15px' }}>
+                    <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Travel Date</div>
+                    <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#1e293b' }}>{formatDate(booking.travel_date)}</div>
+                  </div>
+                  <div style={{ marginBottom: '15px' }}>
+                    <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Departure Time</div>
+                    <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#1e293b' }}>{formatTime(booking.departure_time)}</div>
+                  </div>
+                  <div style={{ marginBottom: '15px' }}>
+                    <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Seat Number(s)</div>
+                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#2563eb' }}>
+                      {Array.isArray(booking.seat_numbers) ? booking.seat_numbers.join(', ') : booking.seat_numbers}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bus Details */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px', marginBottom: '25px', padding: '15px', background: '#f1f5f9', borderRadius: '8px' }}>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Bus Type</div>
+                  <div style={{ fontSize: '14px', fontWeight: '600', color: '#1e293b' }}>{booking.bus_type}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Bus Number</div>
+                  <div style={{ fontSize: '14px', fontWeight: '600', color: '#1e293b' }}>{booking.bus_number}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Operator</div>
+                  <div style={{ fontSize: '14px', fontWeight: '600', color: '#1e293b' }}>{booking.bus_company || 'Bus Service'}</div>
+                </div>
+              </div>
+
+              {/* Baggage & Payment */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '25px' }}>
+                <div style={{ padding: '15px', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Baggage Allowance</div>
+                  <div style={{ fontSize: '14px', fontWeight: '600', color: '#1e293b' }}>
+                    {booking.has_baggage ? `${booking.baggage_weight || 15}kg` : 'No baggage'}
+                  </div>
+                </div>
+                <div style={{ padding: '15px', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Total Amount Paid</div>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#16a34a' }}>{formatCurrency(booking.total_amount)}</div>
+                </div>
+              </div>
+
+              {/* Booking Reference */}
+              <div style={{ marginBottom: '25px', padding: '15px', background: '#fef3c7', border: '2px solid #fbbf24', borderRadius: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: '11px', color: '#92400e', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Booking Reference</div>
+                    <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#92400e', fontFamily: 'monospace', letterSpacing: '1px' }}>
+                      {booking.id || booking._id}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '11px', color: '#92400e', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Booked On</div>
+                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#92400e' }}>{formatDate(booking.created_at)}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* QR Code for Verification */}
+              <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+                <div style={{ display: 'inline-block', padding: '15px', background: 'white', border: '2px solid #e2e8f0', borderRadius: '8px' }}>
+                  <QRCodeSVG
+                    value={JSON.stringify({
+                      pnr: booking.pnr_number,
+                      passenger: booking.passenger_name,
+                      from: booking.departure_city,
+                      to: booking.arrival_city,
+                      date: booking.travel_date,
+                      time: booking.departure_time,
+                      seats: Array.isArray(booking.seat_numbers) ? booking.seat_numbers.join(', ') : booking.seat_numbers,
+                      bookingId: booking.id || booking._id
+                    })}
+                    size={120}
+                    level="M"
+                    includeMargin={false}
+                  />
+                  <div style={{ fontSize: '12px', fontFamily: 'monospace', marginTop: '8px', letterSpacing: '2px', fontWeight: 'bold' }}>
+                    {booking.pnr_number}
+                  </div>
+                  <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
+                    Scan for verification
+                  </div>
+                </div>
+              </div>
+
+              {/* Perforation Line */}
+              <div className="perforation" style={{ borderTop: '2px dashed #cbd5e1', margin: '25px 0', position: 'relative' }}>
+                <div style={{ position: 'absolute', width: '20px', height: '10px', background: 'white', border: '2px solid #cbd5e1', borderRadius: '50%', top: '-11px', left: '-11px' }}></div>
+                <div style={{ position: 'absolute', width: '20px', height: '10px', background: 'white', border: '2px solid #cbd5e1', borderRadius: '50%', top: '-11px', right: '-11px' }}></div>
+              </div>
+
+              {/* Important Instructions */}
+              <div style={{ marginTop: '25px' }}>
+                <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b', marginBottom: '12px' }}>Important Instructions:</h3>
+                <ul style={{ fontSize: '11px', color: '#475569', lineHeight: '1.6', margin: 0, paddingLeft: '20px' }}>
+                  <li>Please arrive at the boarding point at least 30 minutes before departure</li>
+                  <li>Carry a valid government-issued photo ID for verification</li>
+                  <li>Present this ticket (printed or digital) at the time of boarding</li>
+                  <li>For any queries, contact customer support with your PNR number</li>
+                </ul>
+              </div>
+
+              {/* Footer */}
+              <div style={{ marginTop: '25px', paddingTop: '20px', borderTop: '1px solid #e2e8f0', textAlign: 'center' }}>
+                <p style={{ fontSize: '11px', color: '#64748b', margin: '0 0 8px 0' }}>
+                  Thank you for choosing our service. Have a safe journey!
+                </p>
+                <p style={{ fontSize: '10px', color: '#94a3b8', margin: 0 }}>
+                  This is a computer-generated ticket and does not require a signature.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

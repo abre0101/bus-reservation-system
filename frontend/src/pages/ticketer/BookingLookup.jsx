@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Search, 
   User, 
@@ -15,10 +15,14 @@ import {
   CreditCard,
   Mail,
   AlertCircle,
-  Ticket
+  Ticket,
+  QrCode,
+  Camera,
+  X as CloseIcon
 } from 'lucide-react';
 import ticketerService from '../../services/ticketerService';
 import { toast } from 'react-toastify';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 
 const BookingLookup = () => {
   const [searchType, setSearchType] = useState('pnr');
@@ -26,6 +30,10 @@ const BookingLookup = () => {
   const [searching, setSearching] = useState(false);
   const [booking, setBooking] = useState(null);
   const [error, setError] = useState('');
+  const [showQRScanner, setShowQRScanner] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const scannerRef = useRef(null);
+  const qrScannerInstance = useRef(null);
 
   const handleSearch = async () => {
     if (!searchValue.trim()) {
@@ -82,6 +90,94 @@ const BookingLookup = () => {
     }
   };
 
+  // QR Scanner Functions
+  const startQRScanner = () => {
+    setShowQRScanner(true);
+    setIsScanning(true);
+    
+    setTimeout(() => {
+      if (scannerRef.current && !qrScannerInstance.current) {
+        qrScannerInstance.current = new Html5QrcodeScanner(
+          "qr-reader",
+          { 
+            fps: 10,
+            qrbox: { width: 250, height: 250 },
+            aspectRatio: 1.0
+          },
+          false
+        );
+
+        qrScannerInstance.current.render(onScanSuccess, onScanError);
+      }
+    }, 100);
+  };
+
+  const stopQRScanner = () => {
+    if (qrScannerInstance.current) {
+      qrScannerInstance.current.clear().catch(error => {
+        console.error("Failed to clear scanner:", error);
+      });
+      qrScannerInstance.current = null;
+    }
+    setShowQRScanner(false);
+    setIsScanning(false);
+  };
+
+  const onScanSuccess = async (decodedText, decodedResult) => {
+    console.log(`QR Code scanned: ${decodedText}`);
+    toast.info('QR Code detected! Processing...');
+    
+    try {
+      // Parse QR code data
+      const qrData = JSON.parse(decodedText);
+      console.log('Parsed QR data:', qrData);
+      
+      // Stop scanner
+      stopQRScanner();
+      
+      // Search by PNR from QR code
+      if (qrData.pnr) {
+        setSearchType('pnr');
+        setSearchValue(qrData.pnr);
+        
+        // Automatically search
+        setSearching(true);
+        const result = await ticketerService.getBookingByPNR(qrData.pnr);
+        
+        if (result.success && result.booking) {
+          setBooking(result.booking);
+          toast.success('Booking found via QR code!');
+        } else {
+          setError('No booking found with the scanned QR code');
+          toast.error('Booking not found');
+        }
+        setSearching(false);
+      } else {
+        toast.error('Invalid QR code format');
+      }
+    } catch (error) {
+      console.error('QR scan error:', error);
+      toast.error('Failed to process QR code');
+      stopQRScanner();
+    }
+  };
+
+  const onScanError = (errorMessage) => {
+    // Ignore frequent scanning errors
+    if (!errorMessage.includes('NotFoundException')) {
+      console.warn(`QR Scan error: ${errorMessage}`);
+    }
+  };
+
+  // Cleanup scanner on unmount
+  useEffect(() => {
+    return () => {
+      if (qrScannerInstance.current) {
+        qrScannerInstance.current.clear().catch(console.error);
+      }
+    };
+  }, []);
+
   const handlePrintTicket = () => {
     if (!booking) return;
 
@@ -134,6 +230,17 @@ const BookingLookup = () => {
 
       {/* Search Section */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Search Booking</h3>
+          <button
+            onClick={startQRScanner}
+            className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all shadow-sm hover:shadow-md"
+          >
+            <QrCode className="h-5 w-5" />
+            <span>Scan QR Code</span>
+          </button>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="md:col-span-1">
             <label className="block text-sm font-semibold text-gray-700 mb-2">Search By</label>
@@ -182,6 +289,45 @@ const BookingLookup = () => {
           </div>
         )}
       </div>
+
+      {/* QR Scanner Modal */}
+      {showQRScanner && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full">
+            <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-6 flex items-center justify-between rounded-t-2xl">
+              <div className="flex items-center space-x-3">
+                <Camera className="h-6 w-6" />
+                <h2 className="text-2xl font-bold">Scan QR Code</h2>
+              </div>
+              <button
+                onClick={stopQRScanner}
+                className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+              >
+                <CloseIcon className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <div className="bg-gray-100 rounded-xl p-4 mb-4">
+                <p className="text-sm text-gray-700 text-center">
+                  Position the QR code within the frame to scan
+                </p>
+              </div>
+              
+              <div 
+                id="qr-reader" 
+                ref={scannerRef}
+                className="rounded-xl overflow-hidden"
+              ></div>
+              
+              <div className="mt-4 flex items-center justify-center space-x-2 text-sm text-gray-600">
+                <AlertCircle className="h-4 w-4" />
+                <span>Make sure the QR code is clear and well-lit</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Booking Details */}
       {booking && (
