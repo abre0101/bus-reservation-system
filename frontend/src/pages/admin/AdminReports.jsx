@@ -258,24 +258,24 @@ const AdminReports = () => {
   return (
     <div className="space-y-6">
       {/* Header with Filters */}
-      <div className="bg-white rounded-lg shadow-md p-6">
+      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl shadow-lg p-6 text-white">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Reports & Analytics</h1>
-            <p className="text-gray-600 mt-1">Comprehensive business insights and statistics</p>
+            <h1 className="text-3xl font-bold">Reports & Analytics</h1>
+            <p className="text-indigo-100 mt-1">Comprehensive business insights and statistics</p>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3">
             {/* Date Range Selector */}
-            <div className="flex bg-gray-100 rounded-lg p-1">
+            <div className="flex bg-white bg-opacity-20 rounded-lg p-1">
               {['today', 'week', 'month', 'year', 'custom'].map((range) => (
                 <button
                   key={range}
                   onClick={() => setDateRange(range)}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
                     dateRange === range
-                      ? 'bg-white text-indigo-600 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
+                      ? 'bg-white text-indigo-600 shadow-md'
+                      : 'text-white hover:bg-white hover:bg-opacity-10'
                   }`}
                 >
                   {range.charAt(0).toUpperCase() + range.slice(1)}
@@ -287,13 +287,13 @@ const AdminReports = () => {
             <div className="flex gap-2">
               <button
                 onClick={() => exportReport('csv')}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 hover:shadow-lg transition-all text-sm font-medium"
               >
                 📊 Export CSV
               </button>
               <button
                 onClick={() => exportReport('pdf')}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 hover:shadow-lg transition-all text-sm font-medium"
               >
                 📄 Export PDF
               </button>
@@ -305,21 +305,21 @@ const AdminReports = () => {
         {dateRange === 'custom' && (
           <div className="mt-4 flex gap-4">
             <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+              <label className="block text-sm font-medium text-white mb-2">Start Date</label>
               <input
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-2 border border-white border-opacity-30 rounded-lg focus:ring-2 focus:ring-white bg-white bg-opacity-20 text-white placeholder-white placeholder-opacity-70"
               />
             </div>
             <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+              <label className="block text-sm font-medium text-white mb-2">End Date</label>
               <input
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-2 border border-white border-opacity-30 rounded-lg focus:ring-2 focus:ring-white bg-white bg-opacity-20 text-white placeholder-white placeholder-opacity-70"
               />
             </div>
           </div>
@@ -328,24 +328,24 @@ const AdminReports = () => {
 
       {/* Revenue Overview */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Revenue Overview</h2>
-          <div className="mb-6">
-            <p className="text-sm text-gray-600">Total Revenue</p>
-            <p className="text-4xl font-bold text-green-600">{reportData.revenue.total.toLocaleString()} ETB</p>
+        <div className="lg:col-span-2 bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg p-6">
+          <h2 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-6">Revenue Overview</h2>
+          <div className="mb-6 p-6 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border-l-4 border-green-500">
+            <p className="text-sm text-gray-600 font-medium">Total Revenue</p>
+            <p className="text-4xl font-bold text-green-600 mt-2">{reportData.revenue.total.toLocaleString()} ETB</p>
           </div>
           
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-gray-700">Revenue by Payment Method</h3>
+            <h3 className="text-sm font-semibold text-gray-700 mb-4">Revenue by Payment Method</h3>
             {reportData.revenue.breakdown.map((item) => (
-              <div key={item.method} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <div key={item.method} className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl hover:shadow-md transition-all border border-gray-100">
                 <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                    <span className="text-green-600 font-semibold">
+                  <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center shadow-md">
+                    <span className="text-white font-bold text-lg">
                       {item.method.charAt(0).toUpperCase()}
                     </span>
                   </div>
-                  <span className="font-medium text-gray-900 capitalize">{item.method}</span>
+                  <span className="font-semibold text-gray-900 capitalize">{item.method}</span>
                 </div>
                 <span className="text-lg font-bold text-gray-900">{item.amount.toLocaleString()} ETB</span>
               </div>
@@ -353,24 +353,24 @@ const AdminReports = () => {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Quick Stats</h2>
+        <div className="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg p-6">
+          <h2 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-6">Quick Stats</h2>
           <div className="space-y-4">
-            <div className="p-4 bg-blue-50 rounded-lg">
-              <p className="text-sm text-gray-600">Total Bookings</p>
-              <p className="text-3xl font-bold text-blue-600">{reportData.bookings.total}</p>
+            <div className="p-5 bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl shadow-md hover:shadow-lg transition-shadow">
+              <p className="text-sm text-gray-700 font-medium">Total Bookings</p>
+              <p className="text-3xl font-bold text-blue-600 mt-2">{reportData.bookings.total}</p>
             </div>
-            <div className="p-4 bg-purple-50 rounded-lg">
-              <p className="text-sm text-gray-600">Active Buses</p>
-              <p className="text-3xl font-bold text-purple-600">{reportData.buses.total}</p>
+            <div className="p-5 bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl shadow-md hover:shadow-lg transition-shadow">
+              <p className="text-sm text-gray-700 font-medium">Active Buses</p>
+              <p className="text-3xl font-bold text-purple-600 mt-2">{reportData.buses.total}</p>
             </div>
-            <div className="p-4 bg-orange-50 rounded-lg">
-              <p className="text-sm text-gray-600">Total Routes</p>
-              <p className="text-3xl font-bold text-orange-600">{reportData.routes.total}</p>
+            <div className="p-5 bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl shadow-md hover:shadow-lg transition-shadow">
+              <p className="text-sm text-gray-700 font-medium">Total Routes</p>
+              <p className="text-3xl font-bold text-orange-600 mt-2">{reportData.routes.total}</p>
             </div>
-            <div className="p-4 bg-pink-50 rounded-lg">
-              <p className="text-sm text-gray-600">Total Users</p>
-              <p className="text-3xl font-bold text-pink-600">{reportData.users.total}</p>
+            <div className="p-5 bg-gradient-to-br from-pink-50 to-pink-100 rounded-xl shadow-md hover:shadow-lg transition-shadow">
+              <p className="text-sm text-gray-700 font-medium">Total Users</p>
+              <p className="text-3xl font-bold text-pink-600 mt-2">{reportData.users.total}</p>
             </div>
           </div>
         </div>
@@ -442,11 +442,11 @@ const AdminReports = () => {
       </div>
 
       {/* Popular Routes */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Top 10 Popular Routes</h2>
+      <div className="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg p-6">
+        <h2 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-6">Top 10 Popular Routes</h2>
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50">
+            <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
               <tr>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Rank</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Route</th>
@@ -457,21 +457,21 @@ const AdminReports = () => {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {reportData.routes.popular.map((route, index) => (
-                <tr key={index} className="hover:bg-gray-50">
+                <tr key={index} className="hover:bg-gradient-to-r hover:from-indigo-50 hover:to-purple-50 transition-all">
                   <td className="px-4 py-3">
-                    <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
-                      index === 0 ? 'bg-yellow-100 text-yellow-800' :
-                      index === 1 ? 'bg-gray-100 text-gray-800' :
-                      index === 2 ? 'bg-orange-100 text-orange-800' :
-                      'bg-blue-50 text-blue-800'
+                    <span className={`inline-flex items-center justify-center w-10 h-10 rounded-full font-bold shadow-md ${
+                      index === 0 ? 'bg-gradient-to-br from-yellow-400 to-yellow-500 text-white' :
+                      index === 1 ? 'bg-gradient-to-br from-gray-300 to-gray-400 text-white' :
+                      index === 2 ? 'bg-gradient-to-br from-orange-400 to-orange-500 text-white' :
+                      'bg-gradient-to-br from-blue-400 to-blue-500 text-white'
                     }`}>
                       {index + 1}
                     </span>
                   </td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{route.route}</td>
-                  <td className="px-4 py-3 text-gray-600">{route.count}</td>
-                  <td className="px-4 py-3 font-semibold text-green-600">{route.revenue.toLocaleString()} ETB</td>
-                  <td className="px-4 py-3 text-gray-600">{(route.revenue / route.count).toFixed(0)} ETB</td>
+                  <td className="px-4 py-3 font-semibold text-gray-900">{route.route}</td>
+                  <td className="px-4 py-3 text-gray-600 font-medium">{route.count}</td>
+                  <td className="px-4 py-3 font-bold text-green-600">{route.revenue.toLocaleString()} ETB</td>
+                  <td className="px-4 py-3 text-gray-600 font-medium">{(route.revenue / route.count).toFixed(0)} ETB</td>
                 </tr>
               ))}
             </tbody>

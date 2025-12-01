@@ -4,7 +4,23 @@ from bson import ObjectId
 import random
 import string
 from app import mongo
-from datetime import datetime, timedelta 
+from datetime import datetime, timedelta
+import sys
+import os
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+try:
+    from utils.loyalty import (
+        get_loyalty_tier,
+        get_tier_benefits,
+        calculate_discount_amount
+    )
+    LOYALTY_ENABLED = True
+except ImportError:
+    print("⚠️ Loyalty module not found, loyalty features disabled")
+    LOYALTY_ENABLED = False
 
 bookings_bp = Blueprint('bookings', __name__)
 
@@ -442,9 +458,64 @@ def create_booking():
         baggage_weight = data.get('baggage_weight', 0)
         baggage_fee = calculate_baggage_fee(baggage_weight) if has_baggage and baggage_weight > 0 else 0
         
-        # Calculate total amount
+        # Calculate base total
         base_fare = data['base_fare']
-        total_amount = base_fare + baggage_fee
+        base_total = base_fare + baggage_fee
+        
+        # Apply loyalty discount if enabled
+        loyalty_discount_percentage = 0
+        loyalty_discount_amount = 0
+        is_free_trip = data.get('is_free_trip', False)
+        priority_boarding = False
+        free_seat_selection = False
+        extra_baggage_allowance = 0
+        
+        if LOYALTY_ENABLED:
+            try:
+                # Get user's loyalty info
+                user = db.users.find_one({'_id': ObjectId(current_user_id)})
+                if user:
+                    loyalty_points = user.get('loyalty_points', 0)
+                    tier = get_loyalty_tier(loyalty_points)
+                    benefits = get_tier_benefits(tier)
+                    
+                    if is_free_trip:
+                        # Free trip - check eligibility
+                        free_trips_remaining = user.get('free_trips_remaining', 0)
+                        if free_trips_remaining > 0 and base_total <= benefits['free_trip_max_value']:
+                            loyalty_discount_amount = base_total
+                            loyalty_discount_percentage = 100
+                            # Update user's free trips
+                            db.users.update_one(
+                                {'_id': ObjectId(current_user_id)},
+                                {
+                                    '$inc': {
+                                        'free_trips_used': 1,
+                                        'free_trips_remaining': -1
+                                    }
+                                }
+                            )
+                            print(f"🎁 Free trip applied for {user.get('name')}")
+                        else:
+                            is_free_trip = False
+                            print(f"⚠️ Free trip not available or exceeds limit")
+                    
+                    if not is_free_trip:
+                        # Apply tier discount
+                        loyalty_discount_percentage = benefits['discount_percentage']
+                        loyalty_discount_amount = calculate_discount_amount(base_total, tier)
+                        print(f"💰 {tier.capitalize()} discount applied: {loyalty_discount_percentage}% = {loyalty_discount_amount} ETB")
+                    
+                    # Set tier benefits
+                    priority_boarding = benefits['priority_boarding']
+                    free_seat_selection = benefits['free_seat_selection']
+                    extra_baggage_allowance = benefits['extra_baggage_kg']
+                    
+            except Exception as e:
+                print(f"⚠️ Error applying loyalty discount: {str(e)}")
+        
+        # Calculate final amount
+        total_amount = base_total - loyalty_discount_amount
         
         # Generate PNR
         pnr = generate_pnr()
@@ -496,6 +567,15 @@ def create_booking():
             'base_fare': base_fare,
             'total_amount': total_amount,
             
+            # Loyalty Information
+            'loyalty_discount_applied': loyalty_discount_percentage,
+            'loyalty_discount_amount': loyalty_discount_amount,
+            'is_free_trip': is_free_trip,
+            'free_trip_value_cap': benefits['free_trip_max_value'] if LOYALTY_ENABLED and is_free_trip else 0,
+            'priority_boarding': priority_boarding,
+            'free_seat_selection': free_seat_selection,
+            'extra_baggage_allowance': extra_baggage_allowance,
+            
             # Route Information
             'departure_city': departure_city,
             'arrival_city': arrival_city,
@@ -532,6 +612,38 @@ def create_booking():
         result = db.bookings.insert_one(booking)
         booking_id = str(result.inserted_id)
         
+        # Create payment record in payments collection
+        try:
+            payment_record = {
+                'user_id': ObjectId(current_user_id) if current_user_id else None,
+                'booking_id': booking_id,
+                'amount': total_amount,
+                'currency': 'ETB',
+                'payment_method': data.get('payment_method', 'telebirr'),
+                'status': 'success',  # Payment is successful
+                'payment_status': 'paid',
+                'booking_created': True,
+                'booking_source': 'online',
+                'tx_ref': f"booking-{booking_id}",
+                'booking_data': {
+                    'schedule_id': data['schedule_id'],
+                    'passenger_name': data['passenger_name'],
+                    'passenger_phone': data['passenger_phone'],
+                    'seat_numbers': requested_seats,
+                    'base_fare': base_fare
+                },
+                'created_at': current_time,
+                'updated_at': current_time,
+                'paid_at': current_time
+            }
+            
+            payment_result = db.payments.insert_one(payment_record)
+            print(f"✅ Payment record created: {payment_result.inserted_id}")
+        except Exception as payment_error:
+            print(f"⚠️  Failed to create payment record: {str(payment_error)}")
+            # Don't fail the booking if payment record creation fails
+            pass
+        
         # Update schedule booked seats count
         num_seats = len(requested_seats)
         schedule_id_obj = ObjectId(data['schedule_id'])
@@ -551,6 +663,36 @@ def create_booking():
             print(f"✅ Schedule updated successfully! Modified: {update_result.modified_count}")
         else:
             print(f"⚠️  Schedule NOT updated! Matched: {update_result.matched_count}, Modified: {update_result.modified_count}")
+        
+        # Update user's total_bookings count and award loyalty points
+        try:
+            loyalty_points_earned = 100
+            user_update = db.users.update_one(
+                {'_id': ObjectId(current_user_id)},
+                {
+                    '$inc': {
+                        'loyalty_points': loyalty_points_earned,
+                        'total_bookings': 1
+                    }
+                }
+            )
+            if user_update.modified_count > 0:
+                print(f"🎁 Awarded {loyalty_points_earned} loyalty points and updated total_bookings for user {current_user_id}")
+                
+                # Update user's loyalty tier based on new points
+                user = db.users.find_one({'_id': ObjectId(current_user_id)})
+                if user and LOYALTY_ENABLED:
+                    new_points = user.get('loyalty_points', 0)
+                    new_tier = get_loyalty_tier(new_points)
+                    db.users.update_one(
+                        {'_id': ObjectId(current_user_id)},
+                        {'$set': {'loyalty_tier': new_tier}}
+                    )
+                    print(f"🏆 Updated loyalty tier to: {new_tier}")
+            else:
+                print(f"⚠️ Failed to update user booking count for user {current_user_id}")
+        except Exception as loyalty_error:
+            print(f"⚠️ Error updating user booking count: {str(loyalty_error)}")
         
         print(f"✅ Booking created successfully. ID: {booking_id}, Status: {booking_status}, Seats: {num_seats}")
         
@@ -994,10 +1136,31 @@ def get_booking(booking_id):
         print(f"❌ Error in get_booking: {e}")
         return jsonify({'error': str(e)}), 500
 
+def calculate_refund_percentage(hours_until_departure):
+    """
+    Calculate refund percentage based on time until departure
+    - 48h+ before departure: 100% refund
+    - 48h-24h before departure: 70% refund
+    - 24h-6h before departure: 50% refund
+    - 6h-3h before departure: 30% refund
+    - Less than 3h: 0% (cannot cancel)
+    """
+    if hours_until_departure >= 48:
+        return 100
+    elif hours_until_departure >= 24:
+        return 70
+    elif hours_until_departure >= 6:
+        return 50
+    elif hours_until_departure >= 3:
+        return 30
+    else:
+        return 0  # Cannot cancel
+
+
 @bookings_bp.route('/<booking_id>/cancel-request', methods=['POST'])
 @jwt_required()
 def request_cancellation(booking_id):
-    """Customer requests cancellation (must be 2+ days before departure)"""
+    """Customer requests cancellation with tiered refund policy"""
     try:
         db = get_db()
         current_user = get_jwt_identity()
@@ -1024,23 +1187,37 @@ def request_cancellation(booking_id):
         if booking.get('cancellation_requested'):
             return jsonify({'error': 'Cancellation request already submitted'}), 400
         
-        # Check if departure is at least 2 days away
+        # Calculate time until departure and refund percentage
         travel_date = booking.get('travel_date')
         departure_time = booking.get('departure_time', '00:00')
+        hours_until_departure = 0
+        refund_percentage = 0
         
         if travel_date:
             try:
                 departure_datetime = datetime.strptime(f"{travel_date} {departure_time}", "%Y-%m-%d %H:%M")
                 time_until_departure = departure_datetime - current_time
+                hours_until_departure = time_until_departure.total_seconds() / 3600
                 
-                if time_until_departure.total_seconds() < (1 * 24 * 3600):  # Less than 2 days
+                # Check if cancellation is allowed (must be at least 3 hours before)
+                if hours_until_departure < 3:
                     return jsonify({
-                        'error': 'Cancellation requests must be made at least 2 days before departure',
+                        'error': 'Cancellation is not allowed less than 3 hours before departure',
                         'departure_date': travel_date,
-                        'hours_until_departure': time_until_departure.total_seconds() / 3600
+                        'hours_until_departure': round(hours_until_departure, 2)
                     }), 400
+                
+                # Calculate refund percentage based on time
+                refund_percentage = calculate_refund_percentage(hours_until_departure)
+                
             except Exception as e:
                 print(f"⚠️ Error parsing travel date: {e}")
+                return jsonify({'error': 'Invalid travel date format'}), 400
+        
+        # Calculate refund amount
+        total_amount = booking.get('total_amount', 0)
+        refund_amount = round(total_amount * (refund_percentage / 100), 2)
+        cancellation_fee = round(total_amount - refund_amount, 2)
         
         # Create cancellation request
         cancellation_reason = data.get('reason', 'No reason provided')
@@ -1052,18 +1229,42 @@ def request_cancellation(booking_id):
                 'cancellation_request_date': current_time,
                 'cancellation_reason': cancellation_reason,
                 'cancellation_status': 'pending',
+                'expected_refund_percentage': refund_percentage,
+                'expected_refund_amount': refund_amount,
+                'expected_cancellation_fee': cancellation_fee,
+                'hours_until_departure_at_request': round(hours_until_departure, 2),
                 'updated_at': current_time
             }}
         )
         
         if result.modified_count == 0:
             return jsonify({'error': 'Failed to submit cancellation request'}), 400
+        
+        # Determine refund tier message
+        if refund_percentage == 100:
+            tier_message = "48+ hours before departure - 100% refund"
+        elif refund_percentage == 70:
+            tier_message = "24-48 hours before departure - 70% refund"
+        elif refund_percentage == 50:
+            tier_message = "6-24 hours before departure - 50% refund"
+        elif refund_percentage == 30:
+            tier_message = "3-6 hours before departure - 30% refund"
+        else:
+            tier_message = "Standard refund policy"
             
         return jsonify({
             'success': True,
-            'message': 'Cancellation request submitted successfully. An operator will review your request.',
+            'message': f'Cancellation request submitted successfully. {tier_message}',
             'cancellation_status': 'pending',
-            'pnr_number': booking.get('pnr_number')
+            'pnr_number': booking.get('pnr_number'),
+            'refund_details': {
+                'total_amount': total_amount,
+                'refund_percentage': refund_percentage,
+                'expected_refund_amount': refund_amount,
+                'cancellation_fee': cancellation_fee,
+                'hours_until_departure': round(hours_until_departure, 2),
+                'tier_message': tier_message
+            }
         }), 200
         
     except Exception as e:
@@ -1073,7 +1274,7 @@ def request_cancellation(booking_id):
 @bookings_bp.route('/<booking_id>/cancel', methods=['PUT'])
 @jwt_required()
 def cancel_booking(booking_id):
-    """Operator cancels booking and processes refund"""
+    """Operator approves cancellation and processes refund based on tiered policy"""
     try:
         db = get_db()
         current_user = get_jwt_identity()
@@ -1100,10 +1301,29 @@ def cancel_booking(booking_id):
         if booking.get('status') in ['cancelled', 'completed']:
             return jsonify({'error': f'Booking is already {booking.get("status")}'}), 400
         
-        # Process refund - 60% refund policy
+        # Use the expected refund percentage from the cancellation request
+        # If not available, calculate it now based on current time
         total_amount = booking.get('total_amount', 0)
-        refund_percentage = 0.60  # 60% refund
-        refund_amount = round(total_amount * refund_percentage, 2)
+        refund_percentage = booking.get('expected_refund_percentage')
+        
+        if refund_percentage is None:
+            # Calculate refund percentage if not already stored
+            travel_date = booking.get('travel_date')
+            departure_time = booking.get('departure_time', '00:00')
+            
+            if travel_date:
+                try:
+                    departure_datetime = datetime.strptime(f"{travel_date} {departure_time}", "%Y-%m-%d %H:%M")
+                    time_until_departure = departure_datetime - current_time
+                    hours_until_departure = time_until_departure.total_seconds() / 3600
+                    refund_percentage = calculate_refund_percentage(hours_until_departure)
+                except Exception as e:
+                    print(f"⚠️ Error calculating refund: {e}")
+                    refund_percentage = 50  # Default to 50% if calculation fails
+            else:
+                refund_percentage = 50  # Default to 50%
+        
+        refund_amount = round(total_amount * (refund_percentage / 100), 2)
         cancellation_fee = round(total_amount - refund_amount, 2)
         
         refund_method = data.get('refund_method', 'original_payment_method')
@@ -1111,8 +1331,8 @@ def cancel_booking(booking_id):
         
         print(f"💰 Refund calculation:")
         print(f"   - Total Amount: ETB {total_amount}")
-        print(f"   - Refund (60%): ETB {refund_amount}")
-        print(f"   - Cancellation Fee (40%): ETB {cancellation_fee}")
+        print(f"   - Refund ({refund_percentage}%): ETB {refund_amount}")
+        print(f"   - Cancellation Fee ({100 - refund_percentage}%): ETB {cancellation_fee}")
         
         # Update booking status
         result = db.bookings.update_one(
@@ -1124,7 +1344,7 @@ def cancel_booking(booking_id):
                 'cancellation_approved_at': current_time,
                 'cancellation_status': 'approved',
                 'refund_amount': refund_amount,
-                'refund_percentage': refund_percentage * 100,  # Store as percentage
+                'refund_percentage': refund_percentage,
                 'cancellation_fee': cancellation_fee,
                 'refund_method': refund_method,
                 'refund_status': 'processed',
@@ -1157,10 +1377,10 @@ def cancel_booking(booking_id):
             
         return jsonify({
             'success': True,
-            'message': 'Booking cancelled and 60% refund processed successfully',
+            'message': f'Booking cancelled and {refund_percentage}% refund processed successfully',
             'total_amount': total_amount,
             'refund_amount': refund_amount,
-            'refund_percentage': 60,
+            'refund_percentage': refund_percentage,
             'cancellation_fee': cancellation_fee,
             'refund_method': refund_method,
             'pnr_number': booking.get('pnr_number')

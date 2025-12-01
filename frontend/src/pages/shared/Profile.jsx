@@ -1,12 +1,15 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../../hooks/useAuth.jsx'; 
 import { userService } from '../../services/userService'
-import { User, Mail, Phone, MapPin, Calendar, Edit, Save, X, Camera, Shield } from 'lucide-react'
+import { User, Mail, Phone, MapPin, Calendar, Edit, Save, X, Camera, Shield, Star, Gift, TrendingUp, Award } from 'lucide-react'
+import api from '../../services/api'
 
 const SharedProfile = () => {
   const { user, updateUser } = useAuth()
   const [isEditing, setIsEditing] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [loyaltyData, setLoyaltyData] = useState(null)
+  const [loadingLoyalty, setLoadingLoyalty] = useState(true)
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -14,6 +17,25 @@ const SharedProfile = () => {
     address: '',
     date_of_birth: ''
   })
+
+  // Fetch loyalty data
+  useEffect(() => {
+    if (user && user.role === 'customer') {
+      fetchLoyaltyData()
+    }
+  }, [user])
+
+  const fetchLoyaltyData = async () => {
+    try {
+      setLoadingLoyalty(true)
+      const response = await api.get('/api/loyalty/benefits')
+      setLoyaltyData(response.data)
+    } catch (error) {
+      console.error('Error fetching loyalty data:', error)
+    } finally {
+      setLoadingLoyalty(false)
+    }
+  }
 
   useEffect(() => {
     if (user) {
@@ -353,29 +375,140 @@ const SharedProfile = () => {
           </div>
         </div>
 
-        {/* Account Statistics */}
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white rounded-lg shadow-sm border p-6 text-center">
-            <div className="text-2xl font-bold text-blue-600 mb-2">
-              {user.stats?.total_bookings || 0}
+        {/* Loyalty Program Section - Only for customers */}
+        {user.role === 'customer' && (
+          <div className="mt-6">
+            {/* Loyalty Header */}
+            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl shadow-lg p-6 text-white mb-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold mb-2">🎁 Loyalty Rewards</h2>
+                  <p className="text-indigo-100">Earn points, unlock benefits, and enjoy exclusive perks</p>
+                </div>
+                {loyaltyData && (
+                  <div className="text-right">
+                    <p className="text-indigo-100 text-sm">Your Points</p>
+                    <p className="text-4xl font-bold">{loyaltyData.loyalty_points?.toLocaleString() || 0}</p>
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="text-sm text-gray-600">Total Bookings</div>
-          </div>
 
-          <div className="bg-white rounded-lg shadow-sm border p-6 text-center">
-            <div className="text-2xl font-bold text-green-600 mb-2">
-              {user.stats?.completed_trips || 0}
-            </div>
-            <div className="text-sm text-gray-600">Completed Trips</div>
-          </div>
+            {loadingLoyalty ? (
+              <div className="bg-white rounded-xl shadow-lg p-12 text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent mx-auto"></div>
+                <p className="mt-4 text-gray-600">Loading loyalty information...</p>
+              </div>
+            ) : loyaltyData ? (
+              <>
+                {/* Quick Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                  <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-indigo-500">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-gray-600 text-sm font-medium mb-1">Current Tier</p>
+                        <p className="text-2xl font-bold text-gray-900 capitalize">{loyaltyData.tier}</p>
+                      </div>
+                      <div className="text-4xl">{loyaltyData.benefits?.icon || '👤'}</div>
+                    </div>
+                  </div>
 
-          <div className="bg-white rounded-lg shadow-sm border p-6 text-center">
-            <div className="text-2xl font-bold text-purple-600 mb-2">
-              {user.stats?.loyalty_points || 0}
-            </div>
-            <div className="text-sm text-gray-600">Loyalty Points</div>
+                  <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-gray-600 text-sm font-medium mb-1">Discount</p>
+                        <p className="text-2xl font-bold text-green-600">{loyaltyData.benefits?.discount_percentage || 0}%</p>
+                      </div>
+                      <TrendingUp className="w-10 h-10 text-green-500" />
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-500">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-gray-600 text-sm font-medium mb-1">Free Trips</p>
+                        <p className="text-2xl font-bold text-purple-600">{loyaltyData.free_trips_remaining || 0}</p>
+                        <p className="text-xs text-gray-500">remaining this year</p>
+                      </div>
+                      <Gift className="w-10 h-10 text-purple-500" />
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-yellow-500">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-gray-600 text-sm font-medium mb-1">Referrals</p>
+                        <p className="text-2xl font-bold text-yellow-600">{loyaltyData.total_referrals || 0}</p>
+                      </div>
+                      <Award className="w-10 h-10 text-yellow-500" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tier Progress */}
+                {loyaltyData.progress?.next_tier && (
+                  <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+                    <h3 className="text-lg font-bold text-gray-900 mb-4">Progress to {loyaltyData.progress.next_tier} Tier</h3>
+                    <div className="mb-2 flex items-center justify-between text-sm">
+                      <span className="text-gray-600">Current: {loyaltyData.loyalty_points?.toLocaleString()} points</span>
+                      <span className="text-indigo-600 font-semibold">{loyaltyData.progress.points_to_next?.toLocaleString()} points to go</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-4">
+                      <div
+                        className="bg-gradient-to-r from-indigo-500 to-purple-600 h-4 rounded-full transition-all duration-500"
+                        style={{ width: `${Math.min(loyaltyData.progress.progress_percentage || 0, 100)}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                )}
+
+                {/* How to Earn Points */}
+                <div className="bg-white rounded-xl shadow-lg p-6">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                    <Star className="w-6 h-6 text-yellow-500" />
+                    How to Earn Points
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                      <div className="text-3xl mb-2">🎫</div>
+                      <p className="font-semibold text-gray-900 mb-1">Book a Trip</p>
+                      <p className="text-2xl font-bold text-blue-600">+100</p>
+                      <p className="text-xs text-gray-600">points per booking</p>
+                    </div>
+                    <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                      <div className="text-3xl mb-2">✅</div>
+                      <p className="font-semibold text-gray-900 mb-1">Complete Trip</p>
+                      <p className="text-2xl font-bold text-green-600">+50</p>
+                      <p className="text-xs text-gray-600">bonus points</p>
+                    </div>
+                    <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                      <div className="text-3xl mb-2">👥</div>
+                      <p className="font-semibold text-gray-900 mb-1">Refer Friends</p>
+                      <p className="text-2xl font-bold text-purple-600">+{loyaltyData.benefits?.referral_bonus_points || 0}</p>
+                      <p className="text-xs text-gray-600">per referral</p>
+                    </div>
+                    <div className="p-4 bg-pink-50 rounded-lg border border-pink-200">
+                      <div className="text-3xl mb-2">🎂</div>
+                      <p className="font-semibold text-gray-900 mb-1">Birthday Gift</p>
+                      <p className="text-2xl font-bold text-pink-600">+{loyaltyData.benefits?.birthday_bonus_points || 0}</p>
+                      <p className="text-xs text-gray-600">once per year</p>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="bg-white rounded-xl shadow-lg p-12 text-center">
+                <p className="text-gray-600">Unable to load loyalty information</p>
+                <button
+                  onClick={fetchLoyaltyData}
+                  className="mt-4 px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
           </div>
-        </div>
+        )}
       </div>
     </div>
   )

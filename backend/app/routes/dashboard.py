@@ -374,8 +374,9 @@ def get_dashboard_stats():
                 print(f"⚠️ Error parsing travel date for booking {booking.get('_id')}: {date_error}")
                 continue
         
-        # Loyalty points calculation
-        loyalty_points = (total_bookings * 100) + (completed_trips * 50)
+        # Get loyalty points from user document (actual points from loyalty system)
+        loyalty_points = user.get('loyalty_points', 0)
+        loyalty_tier = user.get('loyalty_tier', 'member')
         
         # Monthly spending
         one_month_ago = current_time - timedelta(days=30)
@@ -389,8 +390,8 @@ def get_dashboard_stats():
             'totalBookings': total_bookings,
             'upcomingTrips': upcoming_trips,  # This should now be correct
             'completedTrips': completed_trips,
-            'loyaltyPoints': loyalty_points,
-            'loyaltyTier': get_loyalty_tier(loyalty_points),
+            'loyaltyPoints': loyalty_points,  # Use actual loyalty points from user
+            'loyaltyTier': loyalty_tier,  # Use actual tier from user
             'totalSpent': total_spent,
             'monthlySpent': monthly_spent,
             'currency': 'ETB',
@@ -495,12 +496,16 @@ def get_recent_bookings():
             if isinstance(travel_date, datetime):
                 travel_date = travel_date.isoformat()
             
+            # 🔥 FIX: Prioritize booking data for cities (already has correct data)
+            departure_city = booking.get('departure_city') or schedule_info.get('departure_city', 'Unknown')
+            arrival_city = booking.get('arrival_city') or schedule_info.get('arrival_city', 'Unknown')
+            
             booking_data = {
                 '_id': str(booking['_id']),
                 'id': str(booking['_id']),
                 'pnr_number': booking.get('pnr_number', ''),
-                'departure_city': schedule_info.get('departure_city') or booking.get('departure_city', 'Unknown'),
-                'arrival_city': schedule_info.get('arrival_city') or booking.get('arrival_city', 'Unknown'),
+                'departure_city': departure_city,
+                'arrival_city': arrival_city,
                 'travel_date': travel_date,
                 'departure_date': travel_date,
                 'departure_time': schedule_info.get('departure_time') or booking.get('departure_time', ''),
@@ -570,7 +575,8 @@ def get_upcoming_trips():
         
         trips_data = []
         for booking in upcoming_bookings:
-            print(f"🔍 Processing booking: {booking.get('_id')} - Status: {booking.get('status')}")
+            print(f"🔍 Processing booking: {booking.get('_id')} - PNR: {booking.get('pnr_number')} - Status: {booking.get('status')}")
+            print(f"🔍 Booking has cities: departure={booking.get('departure_city')}, arrival={booking.get('arrival_city')}")
             
             # Get schedule information
             schedule_id = booking.get('schedule_id')
@@ -642,12 +648,26 @@ def get_upcoming_trips():
             else:
                 travel_date_iso = travel_date
             
+            # 🔥 FIX: Prioritize booking data for cities (already has correct data)
+            booking_departure = booking.get('departure_city')
+            booking_arrival = booking.get('arrival_city')
+            route_departure = route_info.get('departure_city', 'Unknown')
+            route_arrival = route_info.get('arrival_city', 'Unknown')
+            
+            print(f"🔍 Booking cities: {booking_departure} → {booking_arrival}")
+            print(f"🔍 Route cities: {route_departure} → {route_arrival}")
+            
+            departure_city = booking_departure or route_departure
+            arrival_city = booking_arrival or route_arrival
+            
+            print(f"🔍 Final cities: {departure_city} → {arrival_city}")
+            
             trip_data = {
                 '_id': str(booking['_id']),
                 'id': str(booking['_id']),
                 'pnr_number': booking.get('pnr_number', ''),
-                'departure_city': route_info.get('departure_city') or booking.get('departure_city', 'Unknown'),
-                'arrival_city': route_info.get('arrival_city') or booking.get('arrival_city', 'Unknown'),
+                'departure_city': departure_city,
+                'arrival_city': arrival_city,
                 'travel_date': travel_date_iso,
                 'departure_date': travel_date_iso,
                 'departure_time': schedule.get('departureTime', ''),

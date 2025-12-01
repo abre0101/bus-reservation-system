@@ -19,8 +19,8 @@ def is_admin():
 DEFAULT_SETTINGS = {
     'refund_policy': {
         'enabled': True,
-        'refund_percentage_24h': 90,  # 90% refund if cancelled 24h before
-        'refund_percentage_12h': 60,  # 60% refund if cancelled 12h before
+        'refund_percentage_24h': 100,  # 100% refund if cancelled 24h before
+        'refund_percentage_12h': 70,  # 60% refund if cancelled 12h before
         'refund_percentage_6h': 30,   # 30% refund if cancelled 6h before
         'refund_percentage_2h': 0,    # No refund if cancelled less than 2h before
         'processing_fee': 50,         # Processing fee in ETB
@@ -71,6 +71,21 @@ DEFAULT_SETTINGS = {
         'currency': 'ETB',
         'timezone': 'Africa/Addis_Ababa',
         'language': 'en'
+    },
+    'backend_config': {
+        'api_rate_limit': 100,
+        'session_timeout_minutes': 60,
+        'max_upload_size_mb': 10,
+        'enable_logging': True,
+        'log_level': 'info',
+        'enable_email_notifications': True,
+        'enable_sms_notifications': False,
+        'database_backup_enabled': True,
+        'backup_frequency_hours': 24,
+        'maintenance_mode': False,
+        'api_version': 'v1',
+        'cors_enabled': True,
+        'jwt_expiry_hours': 24
     }
 }
 
@@ -180,6 +195,9 @@ def update_settings():
         
         if 'general_settings' in data:
             update_data['general_settings'] = {**current_settings.get('general_settings', {}), **data['general_settings']}
+        
+        if 'backend_config' in data:
+            update_data['backend_config'] = {**current_settings.get('backend_config', {}), **data['backend_config']}
         
         update_data['updated_at'] = datetime.utcnow()
         update_data['updated_by'] = get_jwt_identity()

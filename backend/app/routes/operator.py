@@ -1221,12 +1221,15 @@ def get_schedules():
             bus_capacity = schedule.get('total_seats', 45)
             bus_number = schedule.get('bus_number', schedule.get('busNumber', 'Unknown'))
             
-            # Calculate booked seats
-            schedule_id_str = str(schedule['_id'])
-            bookings_count = mongo.db.bookings.count_documents({
-                'schedule_id': schedule_id_str,
-                'status': {'$ne': 'cancelled'}
-            })
+            # Get booked seats - use stored value if available, otherwise calculate
+            bookings_count = schedule.get('booked_seats', 0)
+            if bookings_count == 0:
+                # Fallback: calculate from bookings collection
+                schedule_id_str = str(schedule['_id'])
+                bookings_count = mongo.db.bookings.count_documents({
+                    'schedule_id': schedule_id_str,
+                    'status': {'$nin': ['cancelled', 'refunded']}
+                })
             
             available_seats = max(0, bus_capacity - bookings_count)
             
@@ -1235,10 +1238,11 @@ def get_schedules():
                 '_id': str(schedule['_id']),
                 'route_name': route_name,
                 'bus_number': bus_number,
+                'bus_type': schedule.get('bus_type', schedule.get('busType', 'Standard')),
                 'driver_name': schedule.get('driver_name', 'Not assigned'),
                 'departure_date': schedule.get('departure_date', schedule.get('departure_date', '').strftime('%Y-%m-%d') if isinstance(schedule.get('departure_date'), datetime) else ''),
                 'departure_time': schedule.get('departure_time', schedule.get('departureTime', '')),
-                'arrival_time': schedule.get('arrivalTime', ''),
+                'arrival_time': schedule.get('arrival_time', schedule.get('arrivalTime', '')),
                 'status': schedule.get('status', 'scheduled'),
                 'available_seats': available_seats,
                 'booked_seats': bookings_count,

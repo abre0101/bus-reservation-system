@@ -53,6 +53,8 @@ import AdminReports from './pages/admin/AdminReports'
 import AdminSettings from './pages/admin/AdminSettings'
 import AdminBusTracking from './pages/admin/AdminBusTracking'
 import TariffManagement from './pages/admin/TariffManagement'
+import AdminCustomerManagement from './pages/admin/CustomerManagement'
+import LoyaltyManagement from './pages/admin/LoyaltyManagement'
 
 // Driver Pages - IMPORTANT: Remove DriverLayout from these components
 import {
@@ -178,10 +180,12 @@ const AdminRoutesWrapper = () => (
         <Route path="routes" element={<AdminRoutes />} />
         <Route path="schedules" element={<AdminSchedules />} />
         <Route path="bookings" element={<AdminBookings />} />
+        <Route path="customers" element={<AdminCustomerManagement />} />
         <Route path="payments" element={<AdminPayments />} />
         <Route path="reports" element={<AdminReports />} />
         <Route path="tracking" element={<AdminBusTracking />} />
         <Route path="tariff-management" element={<TariffManagement />} />
+        <Route path="loyalty" element={<LoyaltyManagement />} />
         <Route path="settings" element={<AdminSettings />} />
         <Route path="profile-settings" element={<Settings />} />
       </Routes>

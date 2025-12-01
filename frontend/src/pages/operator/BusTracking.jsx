@@ -184,30 +184,30 @@ const BusTracking = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6 bg-gray-50 min-h-screen">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Bus Tracking</h1>
-          <p className="text-gray-600 mt-1">Real-time monitoring of all buses</p>
+          <p className="text-gray-600 mt-1">Real-time monitoring of all active buses</p>
         </div>
         <div className="flex gap-3 flex-wrap">
           <button
             onClick={() => setAutoRefresh(!autoRefresh)}
-            className={`px-4 py-2 border rounded-lg transition-colors flex items-center gap-2 ${
+            className={`flex items-center gap-2 px-6 py-3 rounded-xl transition-all shadow-lg hover:shadow-xl font-semibold ${
               autoRefresh 
-                ? 'bg-green-50 border-green-300 text-green-700' 
-                : 'bg-white border-gray-300 text-gray-700'
+                ? 'bg-gradient-to-r from-green-500 to-green-600 text-white' 
+                : 'bg-white border-2 border-gray-300 text-gray-700 hover:border-gray-400'
             }`}
           >
-            <RefreshCw className={`w-4 h-4 ${autoRefresh ? 'animate-spin' : ''}`} />
-            Auto-Refresh
+            <RefreshCw className={`w-5 h-5 ${autoRefresh ? 'animate-spin' : ''}`} />
+            Auto-Refresh {autoRefresh ? 'ON' : 'OFF'}
           </button>
           <button
             onClick={fetchBuses}
-            className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
+            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl font-semibold"
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className="w-5 h-5" />
             Refresh Now
           </button>
         </div>
@@ -215,56 +215,81 @@ const BusTracking = () => {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-medium text-gray-600">Total Buses</p>
-            <Bus className="w-5 h-5 text-blue-600" />
+        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-blue-100 text-sm font-medium uppercase tracking-wide">Total Buses</p>
+              <p className="text-4xl font-bold mt-2">{stats.total}</p>
+            </div>
+            <div className="bg-blue-400 bg-opacity-30 rounded-xl p-3">
+              <Bus className="w-8 h-8" />
+            </div>
           </div>
-          <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-medium text-gray-600">On Route</p>
-            <Activity className="w-5 h-5 text-green-600" />
+        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-green-100 text-sm font-medium uppercase tracking-wide">On Route</p>
+              <p className="text-4xl font-bold mt-2">{stats.active}</p>
+            </div>
+            <div className="bg-green-400 bg-opacity-30 rounded-xl p-3">
+              <Activity className="w-8 h-8" />
+            </div>
           </div>
-          <p className="text-2xl font-bold text-green-600">{stats.active}</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-medium text-gray-600">Completed</p>
-            <CheckCircle className="w-5 h-5 text-gray-600" />
+        <div className="bg-gradient-to-br from-gray-500 to-gray-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-gray-100 text-sm font-medium uppercase tracking-wide">Completed</p>
+              <p className="text-4xl font-bold mt-2">{stats.completed}</p>
+            </div>
+            <div className="bg-gray-400 bg-opacity-30 rounded-xl p-3">
+              <CheckCircle className="w-8 h-8" />
+            </div>
           </div>
-          <p className="text-2xl font-bold text-gray-600">{stats.completed}</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-medium text-gray-600">Delayed</p>
-            <AlertCircle className="w-5 h-5 text-orange-600" />
+        <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-orange-100 text-sm font-medium uppercase tracking-wide">Delayed</p>
+              <p className="text-4xl font-bold mt-2">{stats.delayed}</p>
+            </div>
+            <div className="bg-orange-400 bg-opacity-30 rounded-xl p-3">
+              <AlertCircle className="w-8 h-8" />
+            </div>
           </div>
-          <p className="text-2xl font-bold text-orange-600">{stats.delayed}</p>
         </div>
       </div>
 
       {/* Filters and Search */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+      <div className="bg-white rounded-2xl shadow-lg p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+          </svg>
+          <h2 className="text-xl font-bold text-gray-900">Search & Filter</h2>
+        </div>
         <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1">
+          <div className="flex-1 relative">
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by bus number, plate, route, or driver..."
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
             />
+            <svg className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
           </div>
           <div className="flex gap-2">
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all font-semibold"
             >
               <option value="all">All Status</option>
               <option value="active">Active</option>
@@ -278,10 +303,12 @@ const BusTracking = () => {
 
       {/* Bus List */}
       {filteredBuses.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-          <Bus className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No Buses Found</h3>
-          <p className="text-gray-500">
+        <div className="bg-white rounded-2xl shadow-xl p-12 text-center border border-gray-200">
+          <div className="bg-gray-100 rounded-full w-24 h-24 flex items-center justify-center mx-auto mb-4">
+            <Bus className="w-12 h-12 text-gray-400" />
+          </div>
+          <h3 className="text-xl font-bold text-gray-900 mb-2">No Buses Found</h3>
+          <p className="text-gray-500 max-w-md mx-auto">
             {searchQuery ? 'Try adjusting your search criteria' : 'There are no buses matching the selected filter'}
           </p>
         </div>
@@ -296,42 +323,46 @@ const BusTracking = () => {
             return (
               <div 
                 key={bus._id || bus.schedule_id} 
-                className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-lg transition-all cursor-pointer"
+                className="bg-white rounded-2xl shadow-lg border border-gray-200 hover:shadow-2xl transition-all cursor-pointer transform hover:-translate-y-1"
                 onClick={() => setSelectedBus(bus)}
               >
                 <div className="p-6">
                   {/* Header */}
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                        <Bus className="w-6 h-6 text-blue-600" />
+                      <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg">
+                        <Bus className="w-7 h-7 text-white" />
                       </div>
                       <div>
-                        <h3 className="font-bold text-lg text-gray-900">
+                        <h3 className="font-bold text-xl text-gray-900">
                           {bus.bus_number || 'N/A'}
                         </h3>
-                        <p className="text-xs text-gray-500">{bus.plate_number || 'N/A'}</p>
+                        <p className="text-sm text-gray-500 font-medium">{bus.plate_number || 'N/A'}</p>
                       </div>
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${busStatus.color}`}>
+                    <span className={`px-4 py-2 rounded-xl text-xs font-bold shadow-sm ${busStatus.color}`}>
                       {busStatus.label}
                     </span>
                   </div>
 
                   {/* Route */}
-                  <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center gap-2 mb-2">
-                      <MapPin className="w-4 h-4 text-blue-600" />
-                      <span className="text-sm font-medium text-gray-900">
+                  <div className="mb-4 p-4 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border border-gray-200">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="bg-blue-500 rounded-lg p-1.5">
+                        <MapPin className="w-4 h-4 text-white" />
+                      </div>
+                      <span className="text-sm font-bold text-gray-900">
                         {bus.origin_city || 'N/A'}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2 ml-6">
-                      <div className="w-px h-4 bg-gray-300"></div>
+                    <div className="flex items-center gap-3 ml-7">
+                      <div className="w-0.5 h-6 bg-gradient-to-b from-blue-500 to-green-500"></div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <MapPinned className="w-4 h-4 text-green-600" />
-                      <span className="text-sm font-medium text-gray-900">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-green-500 rounded-lg p-1.5">
+                        <MapPinned className="w-4 h-4 text-white" />
+                      </div>
+                      <span className="text-sm font-bold text-gray-900">
                         {bus.destination_city || 'N/A'}
                       </span>
                     </div>
@@ -377,14 +408,14 @@ const BusTracking = () => {
 
                   {/* Progress Bar - Based on Stop Check-ins */}
                   {busStatus.status === 'active' && (
-                    <div className="mb-4">
-                      <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
+                    <div className="mb-4 p-4 bg-blue-50 rounded-xl border border-blue-200">
+                      <div className="flex items-center justify-between text-xs font-semibold text-blue-900 mb-2">
                         <span>Journey Progress</span>
                         <span>{Math.round(progress)}% ({bus.checked_stops_count || 0}/{bus.total_stops || 0} stops)</span>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="w-full bg-blue-200 rounded-full h-3 shadow-inner">
                         <div
-                          className="bg-gradient-to-r from-blue-500 to-green-500 h-2 rounded-full transition-all duration-500"
+                          className="bg-gradient-to-r from-blue-500 via-indigo-500 to-green-500 h-3 rounded-full transition-all duration-500 shadow-lg"
                           style={{ width: `${progress}%` }}
                         ></div>
                       </div>
@@ -393,73 +424,78 @@ const BusTracking = () => {
 
                   {/* Details Grid */}
                   <div className="grid grid-cols-2 gap-3 mb-4">
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-gray-400" />
+                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                      <div className="bg-indigo-100 rounded-lg p-2">
+                        <Clock className="w-5 h-5 text-indigo-600" />
+                      </div>
                       <div>
-                        <p className="text-xs text-gray-500">Departure</p>
-                        <p className="text-sm font-medium text-gray-900">
+                        <p className="text-xs text-gray-500 font-medium">Departure</p>
+                        <p className="text-sm font-bold text-gray-900">
                           {bus.departure_time || 'N/A'}
                         </p>
                       </div>
                     </div>
 
-                   
-
-                    <div className="flex items-center gap-2">
-                      <Users className="w-4 h-4 text-gray-400" />
+                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                      <div className="bg-purple-100 rounded-lg p-2">
+                        <Users className="w-5 h-5 text-purple-600" />
+                      </div>
                       <div>
-                        <p className="text-xs text-gray-500">Passengers</p>
-                        <p className="text-sm font-medium text-gray-900">
+                        <p className="text-xs text-gray-500 font-medium">Passengers</p>
+                        <p className="text-sm font-bold text-gray-900">
                           {bus.booked_seats || 0}/{bus.total_seats || 45}
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4 text-gray-400" />
-                      <div>
-                        <p className="text-xs text-gray-500">Occupancy</p>
-                        <p className="text-sm font-medium text-gray-900">{occupancyRate}%</p>
+                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl col-span-2">
+                      <div className="bg-green-100 rounded-lg p-2">
+                        <TrendingUp className="w-5 h-5 text-green-600" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-xs text-gray-500 font-medium">Occupancy Rate</p>
+                          <p className="text-sm font-bold text-gray-900">{occupancyRate}%</p>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full transition-all ${
+                              occupancyRate >= 90 ? 'bg-red-500' :
+                              occupancyRate >= 70 ? 'bg-yellow-500' :
+                              'bg-green-500'
+                            }`}
+                            style={{ width: `${occupancyRate}%` }}
+                          ></div>
+                        </div>
                       </div>
                     </div>
                   </div>
 
                   {/* Driver Info */}
                   {bus.driver_name && (
-                    <div className="pt-3 border-t border-gray-100">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Navigation className="w-4 h-4 text-gray-400" />
-                          <span className="text-sm text-gray-600">
-                            Driver: <span className="font-medium text-gray-900">{bus.driver_name}</span>
-                          </span>
+                    <div className="pt-4 border-t-2 border-gray-100">
+                      <div className="flex items-center justify-between p-3 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl">
+                        <div className="flex items-center gap-3">
+                          <div className="bg-indigo-500 rounded-lg p-2">
+                            <Navigation className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 font-medium">Driver</p>
+                            <p className="text-sm font-bold text-gray-900">{bus.driver_name}</p>
+                          </div>
                         </div>
                         {bus.driver_phone && (
                           <a 
                             href={`tel:${bus.driver_phone}`}
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                            className="p-3 bg-white hover:bg-indigo-100 rounded-xl transition-colors shadow-sm"
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <Phone className="w-4 h-4 text-blue-600" />
+                            <Phone className="w-5 h-5 text-indigo-600" />
                           </a>
                         )}
                       </div>
                     </div>
                   )}
-
-                  {/* Occupancy Bar */}
-                  <div className="mt-4 pt-4 border-t border-gray-100">
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className={`h-2 rounded-full transition-all ${
-                          occupancyRate >= 90 ? 'bg-red-500' :
-                          occupancyRate >= 70 ? 'bg-yellow-500' :
-                          'bg-green-500'
-                        }`}
-                        style={{ width: `${occupancyRate}%` }}
-                      ></div>
-                    </div>
-                  </div>
                 </div>
               </div>
             );
@@ -469,43 +505,51 @@ const BusTracking = () => {
 
       {/* Bus Details Modal */}
       {selectedBus && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="p-8">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-gray-900">Bus Details</h2>
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg">
+                    <Bus className="w-8 h-8 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">Bus Details</h2>
+                    <p className="text-sm text-gray-500">Complete information</p>
+                  </div>
+                </div>
                 <button
                   onClick={() => setSelectedBus(null)}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="p-3 hover:bg-gray-100 rounded-xl transition-colors"
                 >
-                  <span className="text-2xl">&times;</span>
+                  <span className="text-3xl text-gray-400 hover:text-gray-600">&times;</span>
                 </button>
               </div>
 
               <div className="space-y-6">
                 {/* Bus Info */}
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-600 mb-1">Bus Number</p>
-                    <p className="font-semibold text-gray-900">
+                  <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
+                    <p className="text-xs text-blue-600 font-semibold mb-1 uppercase tracking-wide">Bus Number</p>
+                    <p className="font-bold text-xl text-gray-900">
                       {selectedBus.bus_number || 'N/A'}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-600 mb-1">Plate Number</p>
-                    <p className="font-semibold text-gray-900">
+                  <div className="p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border border-purple-200">
+                    <p className="text-xs text-purple-600 font-semibold mb-1 uppercase tracking-wide">Plate Number</p>
+                    <p className="font-bold text-xl text-gray-900">
                       {selectedBus.plate_number || 'N/A'}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-600 mb-1">Status</p>
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getBusStatus(selectedBus).color}`}>
+                  <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl border border-green-200">
+                    <p className="text-xs text-green-600 font-semibold mb-2 uppercase tracking-wide">Status</p>
+                    <span className={`px-4 py-2 rounded-xl text-xs font-bold shadow-sm ${getBusStatus(selectedBus).color}`}>
                       {getBusStatus(selectedBus).label}
                     </span>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-600 mb-1">Travel Date</p>
-                    <p className="font-semibold text-gray-900">
+                  <div className="p-4 bg-gradient-to-br from-orange-50 to-yellow-50 rounded-xl border border-orange-200">
+                    <p className="text-xs text-orange-600 font-semibold mb-1 uppercase tracking-wide">Travel Date</p>
+                    <p className="font-bold text-lg text-gray-900">
                       {(() => {
                         const date = selectedBus.departure_date;
                         if (!date) return 'N/A';
@@ -524,49 +568,69 @@ const BusTracking = () => {
                 </div>
 
                 {/* Route Details */}
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <h3 className="font-semibold text-gray-900 mb-3">Route Information</h3>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-blue-600" />
-                      <span className="text-sm">Origin: <strong>
-                        {selectedBus.origin_city || 'N/A'}
-                      </strong></span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <MapPinned className="w-4 h-4 text-green-600" />
-                      <span className="text-sm">Destination: <strong>
-                        {selectedBus.destination_city || 'N/A'}
-                      </strong></span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm">Departure: <strong>
-                        {selectedBus.departure_time || 'N/A'}
-                      </strong></span>
-                    </div>
-                    {selectedBus.arrival_time && (
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm">Arrival: <strong>
-                          {selectedBus.arrival_time}
-                        </strong></span>
+                <div className="p-6 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl border-2 border-gray-200 shadow-inner">
+                  <h3 className="font-bold text-lg text-gray-900 mb-4 flex items-center gap-2">
+                    <MapPin className="w-5 h-5 text-indigo-600" />
+                    Route Information
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3 p-3 bg-white rounded-xl">
+                      <div className="bg-blue-500 rounded-lg p-2">
+                        <MapPin className="w-5 h-5 text-white" />
                       </div>
-                    )}
+                      <div>
+                        <p className="text-xs text-gray-500 font-medium">Origin</p>
+                        <p className="text-sm font-bold text-gray-900">{selectedBus.origin_city || 'N/A'}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 p-3 bg-white rounded-xl">
+                      <div className="bg-green-500 rounded-lg p-2">
+                        <MapPinned className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 font-medium">Destination</p>
+                        <p className="text-sm font-bold text-gray-900">{selectedBus.destination_city || 'N/A'}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex items-center gap-3 p-3 bg-white rounded-xl">
+                        <div className="bg-indigo-500 rounded-lg p-2">
+                          <Clock className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 font-medium">Departure</p>
+                          <p className="text-sm font-bold text-gray-900">{selectedBus.departure_time || 'N/A'}</p>
+                        </div>
+                      </div>
+                      {selectedBus.arrival_time && (
+                        <div className="flex items-center gap-3 p-3 bg-white rounded-xl">
+                          <div className="bg-purple-500 rounded-lg p-2">
+                            <Clock className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 font-medium">Arrival</p>
+                            <p className="text-sm font-bold text-gray-900">{selectedBus.arrival_time}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
                 {/* Passenger Info */}
-                <div className="p-4 bg-blue-50 rounded-lg">
-                  <h3 className="font-semibold text-gray-900 mb-3">Passenger Information</h3>
+                <div className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border-2 border-blue-200 shadow-inner">
+                  <h3 className="font-bold text-lg text-gray-900 mb-4 flex items-center gap-2">
+                    <Users className="w-5 h-5 text-blue-600" />
+                    Passenger Information
+                  </h3>
                   <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-600">Booked Seats</p>
-                      <p className="text-2xl font-bold text-blue-600">{selectedBus.booked_seats || 0}</p>
+                    <div className="p-4 bg-white rounded-xl text-center">
+                      <p className="text-sm text-gray-600 font-medium mb-2">Booked Seats</p>
+                      <p className="text-4xl font-bold text-blue-600">{selectedBus.booked_seats || 0}</p>
                     </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Available Seats</p>
-                      <p className="text-2xl font-bold text-green-600">
+                    <div className="p-4 bg-white rounded-xl text-center">
+                      <p className="text-sm text-gray-600 font-medium mb-2">Available Seats</p>
+                      <p className="text-4xl font-bold text-green-600">
                         {(selectedBus.total_seats || 45) - (selectedBus.booked_seats || 0)}
                       </p>
                     </div>
@@ -575,16 +639,29 @@ const BusTracking = () => {
 
                 {/* Driver Info */}
                 {selectedBus.driver_name && (
-                  <div className="p-4 bg-green-50 rounded-lg">
-                    <h3 className="font-semibold text-gray-900 mb-3">Driver Information</h3>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Navigation className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm">Name: <strong>{selectedBus.driver_name}</strong></span>
+                  <div className="p-6 bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl border-2 border-green-200 shadow-inner">
+                    <h3 className="font-bold text-lg text-gray-900 mb-4 flex items-center gap-2">
+                      <Navigation className="w-5 h-5 text-green-600" />
+                      Driver Information
+                    </h3>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3 p-3 bg-white rounded-xl">
+                        <div className="bg-green-500 rounded-lg p-2">
+                          <Navigation className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 font-medium">Name</p>
+                          <p className="text-sm font-bold text-gray-900">{selectedBus.driver_name}</p>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Phone className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm">Phone: <strong>{selectedBus.driver_phone || 'N/A'}</strong></span>
+                      <div className="flex items-center gap-3 p-3 bg-white rounded-xl">
+                        <div className="bg-blue-500 rounded-lg p-2">
+                          <Phone className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 font-medium">Phone</p>
+                          <p className="text-sm font-bold text-gray-900">{selectedBus.driver_phone || 'N/A'}</p>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -594,15 +671,16 @@ const BusTracking = () => {
               <div className="mt-6 flex gap-3">
                 <button
                   onClick={() => setSelectedBus(null)}
-                  className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                  className="flex-1 px-6 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-colors font-semibold"
                 >
                   Close
                 </button>
                 {selectedBus.driver_phone && (
                   <a
                     href={`tel:${selectedBus.driver_phone}`}
-                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-center"
+                    className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl text-center font-semibold flex items-center justify-center gap-2"
                   >
+                    <Phone className="w-5 h-5" />
                     Call Driver
                   </a>
                 )}

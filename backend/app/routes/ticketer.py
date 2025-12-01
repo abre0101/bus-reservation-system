@@ -738,53 +738,65 @@ def get_customers():
             customer_email = customer.get('email')
             
             if customer_phone:
-                match_conditions.append({'passenger_phone': customer_phone})
-                # Also try with country code format
-                if customer_phone.startswith('0'):
-                    phone_with_code = '+251' + customer_phone[1:]
-                    match_conditions.append({'passenger_phone': phone_with_code})
+                # Normalize phone and try all Ethiopian formats
+                normalized_phone = customer_phone.strip()
+                match_conditions.append({'passenger_phone': normalized_phone})
+                
+                # Handle Ethiopian phone formats
+                if normalized_phone.startswith('0'):
+                    # 0900469816 -> +251900469816, 251900469816
+                    match_conditions.append({'passenger_phone': '+251' + normalized_phone[1:]})
+                    match_conditions.append({'passenger_phone': '251' + normalized_phone[1:]})
+                elif normalized_phone.startswith('251'):
+                    # 251900469816 -> +251900469816, 0900469816
+                    match_conditions.append({'passenger_phone': '+' + normalized_phone})
+                    match_conditions.append({'passenger_phone': '0' + normalized_phone[3:]})
+                elif normalized_phone.startswith('+251'):
+                    # +251900469816 -> 251900469816, 0900469816
+                    match_conditions.append({'passenger_phone': normalized_phone[1:]})
+                    match_conditions.append({'passenger_phone': '0' + normalized_phone[4:]})
             
             if customer_email:
                 match_conditions.append({'passenger_email': customer_email})
             
             match_query = {'$or': match_conditions}
             
-            # Get all bookings for counting
-            all_bookings_stats = mongo.db.bookings.aggregate([
-                {'$match': match_query},
-                {'$group': {
-                    '_id': None,
-                    'total_bookings': {'$sum': 1},
-                    'last_booking': {'$max': '$created_at'}
-                }}
-            ])
+            # Find all matching bookings directly (simpler and more reliable than aggregation)
+            all_bookings = list(mongo.db.bookings.find(match_query))
             
-            # Get non-cancelled bookings for spending calculation
-            spending_stats = mongo.db.bookings.aggregate([
-                {'$match': {
-                    **match_query,
-                    'status': {'$ne': 'cancelled'}  # Exclude cancelled bookings from spending
-                }},
-                {'$group': {
-                    '_id': None,
-                    'total_spent': {'$sum': '$total_amount'}
-                }}
-            ])
+            # Debug logging
+            if len(all_bookings) > 0:
+                print(f"✅ Customer {customer.get('name')}: Found {len(all_bookings)} bookings")
             
-            all_stats = list(all_bookings_stats)
-            spend_stats = list(spending_stats)
+            # Calculate stats from the found bookings
+            total_bookings = len(all_bookings)
+            last_booking = max([b.get('created_at') or b.get('booked_at') for b in all_bookings], default=None) if all_bookings else None
+            total_spent = sum([b.get('total_amount', 0) for b in all_bookings if b.get('status') != 'cancelled'])
             
-            if all_stats:
-                customer_data['booking_count'] = all_stats[0]['total_bookings']
-                customer_data['last_booking'] = all_stats[0]['last_booking']
-            else:
-                customer_data['booking_count'] = 0
-                customer_data['last_booking'] = None
+            # Calculate completed trips (past travel dates with confirmed/completed status)
+            from datetime import datetime
+            current_time = datetime.utcnow()
+            completed_trips = 0
+            for booking in all_bookings:
+                if booking.get('status') in ['confirmed', 'completed', 'checked_in']:
+                    travel_date = booking.get('travel_date') or booking.get('departure_date')
+                    if travel_date:
+                        try:
+                            if isinstance(travel_date, str):
+                                travel_date = datetime.fromisoformat(travel_date.replace('Z', '+00:00'))
+                            if travel_date < current_time:
+                                completed_trips += 1
+                        except:
+                            pass
             
-            if spend_stats:
-                customer_data['total_spent'] = spend_stats[0]['total_spent']
-            else:
-                customer_data['total_spent'] = 0
+            # Loyalty points calculation: (total_bookings * 100) + (completed_trips * 50)
+            loyalty_points = (total_bookings * 100) + (completed_trips * 50)
+            
+            customer_data['booking_count'] = total_bookings
+            customer_data['completed_trips'] = completed_trips
+            customer_data['loyalty_points'] = loyalty_points
+            customer_data['last_booking'] = last_booking
+            customer_data['total_spent'] = total_spent
             
             customers_data.append(customer_data)
 
@@ -826,11 +838,23 @@ def get_customer_bookings(customer_id):
             customer_email = customer.get('email')
             
             if customer_phone:
-                match_conditions.append({'passenger_phone': customer_phone})
-                # Also try with country code
-                if customer_phone.startswith('0'):
-                    phone_with_code = '+251' + customer_phone[1:]
-                    match_conditions.append({'passenger_phone': phone_with_code})
+                # Normalize phone and try all Ethiopian formats
+                normalized_phone = customer_phone.strip()
+                match_conditions.append({'passenger_phone': normalized_phone})
+                
+                # Handle Ethiopian phone formats
+                if normalized_phone.startswith('0'):
+                    # 0900469816 -> +251900469816, 251900469816
+                    match_conditions.append({'passenger_phone': '+251' + normalized_phone[1:]})
+                    match_conditions.append({'passenger_phone': '251' + normalized_phone[1:]})
+                elif normalized_phone.startswith('251'):
+                    # 251900469816 -> +251900469816, 0900469816
+                    match_conditions.append({'passenger_phone': '+' + normalized_phone})
+                    match_conditions.append({'passenger_phone': '0' + normalized_phone[3:]})
+                elif normalized_phone.startswith('+251'):
+                    # +251900469816 -> 251900469816, 0900469816
+                    match_conditions.append({'passenger_phone': normalized_phone[1:]})
+                    match_conditions.append({'passenger_phone': '0' + normalized_phone[4:]})
             
             if customer_email:
                 match_conditions.append({'passenger_email': customer_email})

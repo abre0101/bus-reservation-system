@@ -188,9 +188,21 @@ def create_booking_from_payment(booking_data, user_id, tx_ref, payment_method='c
         if has_baggage and baggage_weight > 0:
             baggage_fee = calculate_baggage_fee(baggage_weight)
         
-        # Calculate total amount
+        # Calculate total amount - use frontend's total if loyalty discount was applied
         base_fare = booking_data.get('base_fare', 0)
-        total_amount = base_fare + baggage_fee
+        base_total = base_fare + baggage_fee
+        
+        # Check if loyalty discount was applied on frontend
+        loyalty_discount_amount = booking_data.get('loyalty_discount_amount', 0)
+        loyalty_discount_percentage = booking_data.get('loyalty_discount_percentage', 0)
+        
+        # Use the discounted total_amount from frontend if provided, otherwise calculate
+        if 'total_amount' in booking_data and loyalty_discount_amount > 0:
+            total_amount = booking_data['total_amount']
+            print(f"💰 Using discounted amount from frontend: {total_amount} ETB (saved {loyalty_discount_amount} ETB)")
+        else:
+            total_amount = base_total
+            print(f"💰 No discount applied")
         
         # FIXED: Set status to 'confirmed' for paid bookings
         booking_status = 'confirmed'  # Set to confirmed when payment is completed
@@ -212,7 +224,12 @@ def create_booking_from_payment(booking_data, user_id, tx_ref, payment_method='c
             'baggage_weight': baggage_weight,
             'baggage_fee': baggage_fee,
             'base_fare': base_fare,
+            'base_total': base_total,
             'total_amount': total_amount,
+            
+            # Loyalty discount information
+            'loyalty_discount_applied': loyalty_discount_percentage,
+            'loyalty_discount_amount': loyalty_discount_amount,
             
             # Booking Status & Identification - FIXED: Set to 'pending'
             'status': booking_status,
@@ -266,6 +283,37 @@ def create_booking_from_payment(booking_data, user_id, tx_ref, payment_method='c
                 print(f"✅ Schedule updated successfully! Modified: {update_result.modified_count}")
             else:
                 print(f"⚠️  Schedule NOT updated! Matched: {update_result.matched_count}, Modified: {update_result.modified_count}")
+        
+        # Award loyalty points for the booking (100 points per booking)
+        try:
+            loyalty_points_earned = 100
+            user_update = mongo.db.users.update_one(
+                {'_id': ObjectId(user_id)},
+                {
+                    '$inc': {
+                        'loyalty_points': loyalty_points_earned,
+                        'total_bookings': 1
+                    }
+                }
+            )
+            if user_update.modified_count > 0:
+                print(f"🎁 Awarded {loyalty_points_earned} loyalty points to user {user_id}")
+                
+                # Update user's loyalty tier based on new points
+                user = mongo.db.users.find_one({'_id': ObjectId(user_id)})
+                if user:
+                    from app.utils.loyalty import get_loyalty_tier
+                    new_points = user.get('loyalty_points', 0)
+                    new_tier = get_loyalty_tier(new_points)
+                    mongo.db.users.update_one(
+                        {'_id': ObjectId(user_id)},
+                        {'$set': {'loyalty_tier': new_tier}}
+                    )
+                    print(f"🏆 Updated loyalty tier to: {new_tier}")
+            else:
+                print(f"⚠️ Failed to award loyalty points to user {user_id}")
+        except Exception as loyalty_error:
+            print(f"⚠️ Error awarding loyalty points: {str(loyalty_error)}")
         
         print(f"✅ Booking created successfully: {result.inserted_id}")
         print(f"📋 Booking details: {schedule_info['departure_city']} → {schedule_info['arrival_city']} on {schedule_info['travel_date']}")
@@ -666,11 +714,23 @@ def create_telebirr_payment():
         if has_baggage and baggage_weight > 0:
             baggage_fee = calculate_baggage_fee(baggage_weight)
         
-        # Calculate total amount
+        # Calculate total amount - use frontend's total if loyalty discount was applied
         base_fare = data['base_fare']
-        total_amount = base_fare + baggage_fee
+        base_total = base_fare + baggage_fee
         
-        print(f"💰 Pricing - Base: {base_fare}, Baggage: {baggage_fee}, Total: {total_amount}")
+        # Check if loyalty discount was applied on frontend
+        loyalty_discount_amount = data.get('loyalty_discount_amount', 0)
+        loyalty_discount_percentage = data.get('loyalty_discount_percentage', 0)
+        
+        # Use the discounted total_amount from frontend if provided, otherwise calculate
+        if 'total_amount' in data and loyalty_discount_amount > 0:
+            total_amount = data['total_amount']
+            print(f"💰 Using discounted amount from frontend: {total_amount} ETB (saved {loyalty_discount_amount} ETB)")
+        else:
+            total_amount = base_total
+            print(f"💰 No discount applied")
+        
+        print(f"💰 Pricing - Base: {base_fare}, Baggage: {baggage_fee}, Discount: {loyalty_discount_amount}, Total: {total_amount}")
         
         # FIXED: Set status to 'confirmed' for Telebirr payments
         booking_status = 'confirmed'
@@ -692,7 +752,12 @@ def create_telebirr_payment():
             'baggage_weight': baggage_weight,
             'baggage_fee': baggage_fee,
             'base_fare': base_fare,
+            'base_total': base_total,
             'total_amount': total_amount,
+            
+            # Loyalty discount information
+            'loyalty_discount_applied': loyalty_discount_percentage,
+            'loyalty_discount_amount': loyalty_discount_amount,
             
             # Booking Status & Identification - FIXED: Set to 'pending'
             'status': booking_status,
@@ -732,6 +797,39 @@ def create_telebirr_payment():
         
         # Insert the booking
         result = mongo.db.bookings.insert_one(booking_record)
+        booking_id = str(result.inserted_id)
+        
+        # Create payment record in payments collection
+        try:
+            payment_record = {
+                'user_id': ObjectId(user_id),
+                'booking_id': booking_id,
+                'amount': total_amount,
+                'currency': 'ETB',
+                'payment_method': 'telebirr',
+                'status': 'success',
+                'payment_status': 'paid',
+                'booking_created': True,
+                'booking_source': 'online',
+                'tx_ref': f"telebirr-{booking_id}",
+                'booking_data': {
+                    'schedule_id': schedule_id,
+                    'passenger_name': data['passenger_name'],
+                    'passenger_phone': data['passenger_phone'],
+                    'seat_numbers': data['seat_numbers'],
+                    'base_fare': base_fare
+                },
+                'created_at': datetime.utcnow(),
+                'updated_at': datetime.utcnow(),
+                'paid_at': datetime.utcnow()
+            }
+            
+            payment_result = mongo.db.payments.insert_one(payment_record)
+            print(f"✅ Payment record created: {payment_result.inserted_id}")
+        except Exception as payment_error:
+            print(f"⚠️  Failed to create payment record: {str(payment_error)}")
+            import traceback
+            print(f"⚠️  Payment error traceback: {traceback.format_exc()}")
         
         # Update schedule booked seats count
         num_seats = len(data['seat_numbers'])
@@ -752,12 +850,43 @@ def create_telebirr_payment():
         else:
             print(f"⚠️  Schedule NOT updated! Matched: {update_result.matched_count}, Modified: {update_result.modified_count}")
         
-        print(f"✅ Telebirr booking created: {result.inserted_id}")
+        # Award loyalty points for the booking (100 points per booking)
+        try:
+            loyalty_points_earned = 100
+            user_update = mongo.db.users.update_one(
+                {'_id': ObjectId(user_id)},
+                {
+                    '$inc': {
+                        'loyalty_points': loyalty_points_earned,
+                        'total_bookings': 1
+                    }
+                }
+            )
+            if user_update.modified_count > 0:
+                print(f"🎁 Awarded {loyalty_points_earned} loyalty points to user {user_id}")
+                
+                # Update user's loyalty tier based on new points
+                user = mongo.db.users.find_one({'_id': ObjectId(user_id)})
+                if user:
+                    from app.utils.loyalty import get_loyalty_tier
+                    new_points = user.get('loyalty_points', 0)
+                    new_tier = get_loyalty_tier(new_points)
+                    mongo.db.users.update_one(
+                        {'_id': ObjectId(user_id)},
+                        {'$set': {'loyalty_tier': new_tier}}
+                    )
+                    print(f"🏆 Updated loyalty tier to: {new_tier}")
+            else:
+                print(f"⚠️ Failed to award loyalty points to user {user_id}")
+        except Exception as loyalty_error:
+            print(f"⚠️ Error awarding loyalty points: {str(loyalty_error)}")
+        
+        print(f"✅ Telebirr booking created: {booking_id}")
         
         return jsonify({
             'success': True,
             'message': 'Booking created successfully with Telebirr payment.',
-            'booking_id': str(result.inserted_id),
+            'booking_id': booking_id,
             'pnr_number': pnr_number,
             'baggage_tag': baggage_tag,
             'status': booking_status,  # Return pending status

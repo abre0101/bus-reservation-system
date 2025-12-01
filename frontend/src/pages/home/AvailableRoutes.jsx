@@ -324,13 +324,13 @@ const AvailableRoutes = () => {
 
   const getRouteImage = (destinationCity) => {
     const cityImages = {
-      'Bahir Dar': 'https://images.unsplash.com/photo-1576675466969-38eeae4b41f6?w=400',
+      'Bahir Dar':'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=400',
       'Hawassa': 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=400',
-      'Dire Dawa': 'https://images.unsplash.com/photo-1551884170-09fb70b3b97c?w=400',
-      'Mekele': 'https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?w=400',
-      'Gonder': 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400',
+      'Dire Dawa': 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=400',
+      'Mekele':'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=400',
+      'Gonder': 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=400',
       'Jimma': 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=400',
-      'Addis Ababa': 'https://images.unsplash.com/photo-1576675466969-38eeae4b41f6?w=400'
+      'Addis Ababa': 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=400',
     };
     return cityImages[destinationCity] || 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=400';
   };

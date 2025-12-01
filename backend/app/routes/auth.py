@@ -32,8 +32,12 @@ def register():
             'email': data['email'],
             'password': hashed_password,
             'phone': data.get('phone', ''),
+            'birthday': data.get('birthday', ''),  # Add birthday field for loyalty rewards
             'role': 'customer',  # Force customer role for public registration
             'is_active': True,   # Ensure this field is included
+            'loyalty_points': 0,  # Initialize loyalty points
+            'loyalty_tier': 'member',  # Start at member tier
+            'total_bookings': 0,  # Initialize booking count
             'created_at': datetime.utcnow(),
             'updated_at': datetime.utcnow()
         }
@@ -62,6 +66,9 @@ def register():
                 'phone': user['phone'],
                 'role': user['role'],
                 'is_active': user['is_active'],  # Include in response
+                'loyalty_points': user['loyalty_points'],
+                'loyalty_tier': user['loyalty_tier'],
+                'total_bookings': user['total_bookings'],
                 'created_at': user['created_at'].isoformat()
             }
         }), 201
@@ -111,17 +118,26 @@ def login():
 
         print(f"✅ User logged in successfully: {user['email']}")
 
+        # Build user response with loyalty data for customers
+        user_response = {
+            'id': str(user['_id']),
+            'name': user['name'],
+            'email': user['email'],
+            'phone': user.get('phone', ''),
+            'role': user['role'],
+            'is_active': user.get('is_active', True), 
+            'created_at': user['created_at'].isoformat() if user.get('created_at') else None
+        }
+        
+        # Add loyalty points for customers
+        if user['role'] == 'customer':
+            user_response['loyalty_points'] = user.get('loyalty_points', 0)
+            user_response['loyalty_tier'] = user.get('loyalty_tier', 'member')
+            user_response['total_bookings'] = user.get('total_bookings', 0)
+
         return jsonify({
             'access_token': access_token,
-            'user': {
-                'id': str(user['_id']),
-                'name': user['name'],
-                'email': user['email'],
-                'phone': user.get('phone', ''),
-                'role': user['role'],
-                'is_active': user.get('is_active', True), 
-                'created_at': user['created_at'].isoformat() if user.get('created_at') else None
-            }
+            'user': user_response
         }), 200
 
     except Exception as e:
@@ -138,15 +154,79 @@ def get_current_user():
         if not user:
             return jsonify({'message': 'User not found'}), 404
 
-        return jsonify({
+        # Build user response
+        user_response = {
             'id': str(user['_id']),
             'name': user['name'],
             'email': user['email'],
             'phone': user.get('phone', ''),
             'role': user['role'],
             'created_at': user['created_at'].isoformat() if user.get('created_at') else None
-        }), 200
+        }
+        
+        # Add loyalty data for customers
+        if user['role'] == 'customer':
+            user_response['loyalty_points'] = user.get('loyalty_points', 0)
+            user_response['loyalty_tier'] = user.get('loyalty_tier', 'member')
+            user_response['total_bookings'] = user.get('total_bookings', 0)
+
+        return jsonify(user_response), 200
 
     except Exception as e:
         print(f"❌ Get current user error: {str(e)}")
         return jsonify({'message': 'Failed to get user data', 'error': str(e)}), 500
+
+
+@auth_bp.route('/profile', methods=['PUT'])
+@jwt_required()
+def change_password():
+    """Change user password"""
+    try:
+        current_user_id = get_jwt_identity()
+        data = request.get_json()
+        
+        print(f"🔐 Password change request for user: {current_user_id}")
+        
+        # Validate required fields
+        current_password = data.get('current_password')
+        new_password = data.get('new_password')
+        
+        if not current_password or not new_password:
+            return jsonify({'error': 'Current password and new password are required'}), 400
+        
+        if len(new_password) < 6:
+            return jsonify({'error': 'New password must be at least 6 characters long'}), 400
+        
+        # Get user
+        user = mongo.db.users.find_one({'_id': ObjectId(current_user_id)})
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Verify current password
+        if not bcrypt.check_password_hash(user['password'], current_password):
+            return jsonify({'error': 'Current password is incorrect'}), 401
+        
+        # Hash new password
+        hashed_password = bcrypt.generate_password_hash(new_password).decode('utf-8')
+        
+        # Update password
+        mongo.db.users.update_one(
+            {'_id': ObjectId(current_user_id)},
+            {
+                '$set': {
+                    'password': hashed_password,
+                    'updated_at': datetime.utcnow()
+                }
+            }
+        )
+        
+        print(f"✅ Password changed successfully for user: {current_user_id}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Password changed successfully'
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Error changing password: {str(e)}")
+        return jsonify({'error': 'Failed to change password'}), 500

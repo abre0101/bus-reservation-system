@@ -658,72 +658,119 @@ const Buses = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6 bg-gray-50 min-h-screen">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Bus Fleet Management</h1>
+          <p className="text-gray-600 mt-1">Manage your bus fleet, maintenance, and assignments</p>
+        </div>
+        <button
+          onClick={handleAddBus}
+          className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl font-semibold"
+        >
+          <Plus className="w-5 h-5" />
+          Add New Bus
+        </button>
+      </div>
+
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
-          <p className="text-gray-600 text-sm font-medium">Total Buses</p>
-          <p className="text-3xl font-bold text-gray-900">{stats.total}</p>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-blue-100 text-sm font-medium uppercase tracking-wide">Total Buses</p>
+              <p className="text-4xl font-bold mt-2">{stats.total}</p>
+            </div>
+            <div className="bg-blue-400 bg-opacity-30 rounded-xl p-3">
+              <Car className="w-8 h-8" />
+            </div>
+          </div>
         </div>
-        <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
-          <p className="text-gray-600 text-sm font-medium">Active Buses</p>
-          <p className="text-3xl font-bold text-green-600">{stats.active}</p>
+        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-green-100 text-sm font-medium uppercase tracking-wide">Active Buses</p>
+              <p className="text-4xl font-bold mt-2">{stats.active}</p>
+            </div>
+            <div className="bg-green-400 bg-opacity-30 rounded-xl p-3">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+          </div>
         </div>
-        <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-yellow-500">
-          <p className="text-gray-600 text-sm font-medium">Maintenance</p>
-          <p className="text-3xl font-bold text-yellow-600">{stats.maintenance}</p>
+        <div className="bg-gradient-to-br from-yellow-500 to-orange-500 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-yellow-100 text-sm font-medium uppercase tracking-wide">Maintenance</p>
+              <p className="text-4xl font-bold mt-2">{stats.maintenance}</p>
+            </div>
+            <div className="bg-yellow-400 bg-opacity-30 rounded-xl p-3">
+              <Settings className="w-8 h-8" />
+            </div>
+          </div>
         </div>
-        <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-red-500">
-          <p className="text-gray-600 text-sm font-medium">Inactive</p>
-          <p className="text-3xl font-bold text-red-600">{stats.inactive}</p>
+        <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-red-100 text-sm font-medium uppercase tracking-wide">Inactive</p>
+              <p className="text-4xl font-bold mt-2">{stats.inactive}</p>
+            </div>
+            <div className="bg-red-400 bg-opacity-30 rounded-xl p-3">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+              </svg>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Filters</h2>
-          <button 
-            onClick={handleAddBus}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
-          >
-            + Add Bus
-          </button>
+      <div className="bg-white rounded-2xl shadow-lg p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+          </svg>
+          <h2 className="text-xl font-bold text-gray-900">Filters</h2>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
-            <input
-              type="text"
-              placeholder="Search by plate number, name, or bus number..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-            />
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Search Buses</label>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search by plate number, name, or bus number..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+              />
+              <Search className="w-5 h-5 text-gray-400 absolute left-3 top-3.5" />
+            </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Status Filter</label>
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
             >
               <option value="all">All Status</option>
-              <option value="active">Active</option>
-              <option value="maintenance">Maintenance</option>
-              <option value="inactive">Inactive</option>
+              <option value="active">Active Only</option>
+              <option value="maintenance">Maintenance Only</option>
+              <option value="inactive">Inactive Only</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Type Filter</label>
             <select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
             >
               <option value="all">All Types</option>
               {getBusTypes().map(type => (
-                <option key={type} value={type}>{type}</option>
+                <option key={type} value={type} className="capitalize">{type}</option>
               ))}
             </select>
           </div>
@@ -732,13 +779,15 @@ const Buses = () => {
 
       {/* Bus List/Grid */}
       {filteredBuses.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-md p-12 text-center">
-          <div className="text-6xl mb-4">🚌</div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">No buses found</h3>
-          <p className="text-gray-500 text-lg">
+        <div className="bg-white rounded-2xl shadow-lg p-16 text-center border-2 border-gray-200">
+          <div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Car className="w-10 h-10 text-gray-400" />
+          </div>
+          <h3 className="text-xl font-bold text-gray-900 mb-2">No Buses Found</h3>
+          <p className="text-gray-600">
             {searchTerm || filterStatus !== 'all' || filterType !== 'all'
-              ? 'Try adjusting your filters'
-              : 'Get started by adding your first bus'}
+              ? 'Try adjusting your filters or search terms.'
+              : 'Get started by adding your first bus to the fleet.'}
           </p>
         </div>
       ) : (
@@ -748,80 +797,102 @@ const Buses = () => {
             const formattedAmenities = formatAmenities(bus.amenities)
             
             return (
-              <div key={bus._id} className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow overflow-hidden">
-                <div className="p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
-                      <Car className="h-8 w-8 text-blue-600" />
+              <div key={bus._id} className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105 overflow-hidden border border-gray-200">
+                <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center shadow-md">
+                        <Car className="h-6 w-6 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-white">{bus.bus_name || 'Unnamed Bus'}</h3>
+                        <p className="text-indigo-100 text-sm">{bus.plate_number}</p>
+                      </div>
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(bus.status)}`}>
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold shadow-md ${getStatusColor(bus.status)}`}>
                       {bus.status}
                     </span>
                   </div>
+                </div>
 
-                  <h3 className="text-lg font-bold text-gray-900 mb-1">{bus.bus_name || 'Unnamed Bus'}</h3>
-                  <p className="text-sm text-gray-600 mb-4">{bus.plate_number}</p>
-
-                  <div className="space-y-2 mb-4">
-                    <div className="flex items-center text-sm">
-                      <span className="text-gray-600 w-24">Type:</span>
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${getBusTypeColor(bus.type)}`}>
+                <div className="p-6">
+                  <div className="space-y-3 mb-4">
+                    <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                      <div className="flex items-center space-x-2 mb-1">
+                        <span className="text-xs text-blue-700 font-semibold uppercase">Type</span>
+                      </div>
+                      <span className={`inline-block px-2 py-1 rounded text-xs font-bold ${getBusTypeColor(bus.type)}`}>
                         {bus.type}
                       </span>
                     </div>
-                    <div className="flex items-center text-sm">
-                      <span className="text-gray-600 w-24">Bus Number:</span>
-                      <span className="font-semibold text-gray-900">{bus.bus_number || 'N/A'}</span>
-                    </div>
-                    <div className="flex items-center text-sm">
-                      <span className="text-gray-600 w-24">Capacity:</span>
-                      <span className={`font-semibold ${getCapacityColor(bus.capacity)}`}>
-                        {bus.capacity || 0} seats
-                      </span>
-                    </div>
-                    {bus.manufacturer && (
-                      <div className="flex items-center text-sm">
-                        <span className="text-gray-600 w-24">Make:</span>
-                        <span className="font-semibold text-gray-900">{bus.manufacturer}</span>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <Users className="w-4 h-4 text-green-600" />
+                          <span className="text-xs text-green-700 font-semibold uppercase">Capacity</span>
+                        </div>
+                        <p className={`text-lg font-bold ${getCapacityColor(bus.capacity)}`}>
+                          {bus.capacity || 0}
+                        </p>
+                        <p className="text-xs text-green-700">seats</p>
                       </div>
-                    )}
+
+                      <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                          </svg>
+                          <span className="text-xs text-purple-700 font-semibold uppercase">Number</span>
+                        </div>
+                        <p className="text-sm font-bold text-purple-900">{bus.bus_number || 'N/A'}</p>
+                      </div>
+                    </div>
+
                     {formattedAmenities.length > 0 && (
-                      <div className="flex items-start text-sm pt-2">
-                        <span className="text-gray-600 w-24">Amenities:</span>
-                        <div className="flex flex-wrap gap-1 flex-1">
-                          {formattedAmenities.slice(0, 3).map((amenity, index) => {
+                      <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <Star className="w-4 h-4 text-yellow-500" />
+                          <span className="text-xs text-gray-700 font-semibold uppercase">Amenities</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {formattedAmenities.slice(0, 4).map((amenity, index) => {
                             const IconComponent = amenity.icon
                             return (
-                              <span key={index} className="inline-flex items-center text-xs text-gray-600" title={amenity.name}>
+                              <span key={index} className="inline-flex items-center gap-1 text-xs text-gray-600 bg-white px-2 py-1 rounded border border-gray-200" title={amenity.name}>
                                 {IconComponent && <IconComponent className="h-3 w-3" />}
+                                {amenity.name}
                               </span>
                             )
                           })}
-                          {formattedAmenities.length > 3 && (
-                            <span className="text-xs text-gray-500">+{formattedAmenities.length - 3}</span>
+                          {formattedAmenities.length > 4 && (
+                            <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded border border-gray-200">+{formattedAmenities.length - 4} more</span>
                           )}
                         </div>
                       </div>
                     )}
                   </div>
 
-                  <div className="flex gap-2 pt-4 border-t">
+                  <div className="flex gap-2 pt-4 border-t-2 border-gray-200">
                     <button
                       onClick={() => handleShowBus(bus)}
-                      className="flex-1 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
+                      className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all shadow-md hover:shadow-lg text-sm font-semibold"
                     >
+                      <Eye className="w-4 h-4" />
                       View
                     </button>
                     <button
                       onClick={() => handleEditBus(bus)}
-                      className="flex-1 px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm font-medium"
+                      className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-md hover:shadow-lg text-sm font-semibold"
                     >
+                      <Edit className="w-4 h-4" />
                       Edit
                     </button>
                     <button
                       onClick={() => handleDelete(bus._id)}
-                      className="flex-1 px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm font-medium"
+                      className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all shadow-md hover:shadow-lg text-sm font-semibold"
                     >
+                      <Trash2 className="w-4 h-4" />
                       Delete
                     </button>
                   </div>

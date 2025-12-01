@@ -9,9 +9,10 @@ const PaymentPage = () => {
   const navigate = useNavigate()
   const [bookingData, setBookingData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [loyaltyDiscount, setLoyaltyDiscount] = useState(null)
 
   useEffect(() => {
-    const loadBookingData = () => {
+    const loadBookingData = async () => {
       try {
         console.log('💰 PaymentPage loading booking data...')
         
@@ -51,8 +52,62 @@ const PaymentPage = () => {
         const totalBaggageFee = parseFloat(storedTotalBaggageFee || '0')
         const passengerCount = parseInt(storedPassengerCount || '1')
 
-        // Calculate total amount
-        const totalAmount = baseFare + totalBaggageFee
+        // Calculate base total amount
+        const baseTotal = baseFare + totalBaggageFee
+
+        // Fetch loyalty discount
+        let discountAmount = 0
+        let discountPercentage = 0
+        let finalAmount = baseTotal
+        let loyaltyInfo = null
+
+        try {
+          const token = sessionStorage.getItem('token')
+          console.log('🔑 Token exists:', !!token)
+          console.log('💰 Fetching discount for base price:', baseTotal)
+          
+          if (token) {
+            const response = await fetch('http://localhost:5000/api/loyalty/apply-discount', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({ base_price: baseTotal })
+            })
+
+            console.log('📡 Loyalty API response status:', response.status)
+            
+            if (response.ok) {
+              const data = await response.json()
+              console.log('📊 Loyalty API data:', data)
+              
+              if (data.success) {
+                discountAmount = data.discount_amount || 0
+                discountPercentage = data.discount_percentage || 0
+                finalAmount = data.final_price || baseTotal
+                loyaltyInfo = {
+                  tier: data.tier,
+                  discount_percentage: discountPercentage,
+                  discount_amount: discountAmount
+                }
+                console.log('🎁 Loyalty discount applied:', loyaltyInfo)
+                console.log('💵 Final amount after discount:', finalAmount)
+                setLoyaltyDiscount(loyaltyInfo)
+              } else {
+                console.log('⚠️ Loyalty API returned success=false')
+              }
+            } else {
+              const errorText = await response.text()
+              console.error('❌ Loyalty API error:', response.status, errorText)
+            }
+          } else {
+            console.log('⚠️ No token found, skipping loyalty discount')
+          }
+        } catch (error) {
+          console.error('⚠️ Error fetching loyalty discount:', error)
+          // Continue without discount if there's an error
+        }
 
         // Prepare complete booking data for payment
         const completeBookingData = {
@@ -79,8 +134,11 @@ const PaymentPage = () => {
           baggage_data: baggageData,
           
           // Calculated amounts
-          total_amount: totalAmount,
-          totalAmount: totalAmount,
+          base_total: baseTotal,
+          loyalty_discount_percentage: discountPercentage,
+          loyalty_discount_amount: discountAmount,
+          total_amount: finalAmount,
+          totalAmount: finalAmount,
           
           // Additional journey information
           departure_city: schedule.departure_city || schedule.origin_city,
@@ -90,6 +148,14 @@ const PaymentPage = () => {
         }
 
         console.log('✅ Complete booking data prepared:', completeBookingData)
+        console.log('💰 Discount values in booking data:', {
+          base_total: completeBookingData.base_total,
+          loyalty_discount_amount: completeBookingData.loyalty_discount_amount,
+          loyalty_discount_percentage: completeBookingData.loyalty_discount_percentage,
+          total_amount: completeBookingData.total_amount,
+          finalAmount: finalAmount,
+          discountAmount: discountAmount
+        })
         setBookingData(completeBookingData)
         
       } catch (error) {
@@ -261,10 +327,34 @@ const PaymentPage = () => {
               </div>
             )}
             
+            {loyaltyDiscount && loyaltyDiscount.discount_amount > 0 && (
+              <>
+                <div className="flex justify-between items-center mb-2 pt-2 border-t">
+                  <span className="text-gray-600">Subtotal:</span>
+                  <span className="font-semibold text-gray-900">{bookingData.base_total} ETB</span>
+                </div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-green-600 flex items-center gap-2">
+                    <span className="text-xl">🎁</span>
+                    Loyalty Discount ({loyaltyDiscount.discount_percentage}% - {loyaltyDiscount.tier} tier):
+                  </span>
+                  <span className="font-semibold text-green-600">-{loyaltyDiscount.discount_amount.toFixed(2)} ETB</span>
+                </div>
+              </>
+            )}
+            
             <div className="flex justify-between items-center text-lg font-semibold mt-3 pt-3 border-t-4 border-blue-300">
               <span className="text-xl font-bold text-gray-900">Total Amount:</span>
-              <span className="text-3xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">{bookingData.total_amount} ETB</span>
+              <span className="text-3xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">{bookingData.total_amount.toFixed(2)} ETB</span>
             </div>
+            
+            {loyaltyDiscount && loyaltyDiscount.discount_amount > 0 && (
+              <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-sm text-green-700 font-medium text-center">
+                  🎉 You saved {loyaltyDiscount.discount_amount.toFixed(2)} ETB with your {loyaltyDiscount.tier} tier membership!
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -281,6 +371,7 @@ const PaymentPage = () => {
           <PaymentForm
             amount={bookingData.total_amount}
             bookingData={bookingData}
+            loyaltyDiscount={loyaltyDiscount}
             onPaymentSuccess={handlePaymentSuccess}
           />
         </div>

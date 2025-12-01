@@ -376,7 +376,7 @@ const AdminRoutes = () => {
                     <div className="flex flex-wrap gap-2">
                       {route.stops.map((stop, index) => (
                         <span key={index} className="px-3 py-1 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium border border-gray-200">
-                          {stop}
+                          {typeof stop === 'object' ? stop.name : stop}
                         </span>
                       ))}
                     </div>
@@ -551,7 +551,7 @@ const AdminRoutes = () => {
                         <span className="flex items-center justify-center w-7 h-7 bg-indigo-500 text-white rounded-full text-sm font-bold">
                           {index + 1}
                         </span>
-                        <span className="text-sm font-bold text-gray-800">{stop}</span>
+                        <span className="text-sm font-bold text-gray-800">{typeof stop === 'object' ? stop.name : stop}</span>
                       </div>
                     ))}
                   </div>

@@ -314,6 +314,28 @@ def create_manual_booking():
         }
         
         result = db.bookings.insert_one(booking_data)
+        booking_id = str(result.inserted_id)
+        
+        # Create payment record in payments collection
+        payment_record = {
+            'user_id': ObjectId(current_user['id']),
+            'booking_id': booking_id,
+            'amount': total_amount,
+            'currency': 'ETB',
+            'payment_method': 'cash',
+            'status': 'success',
+            'payment_status': 'paid',
+            'booking_created': True,
+            'booking_source': 'counter',
+            'tx_ref': f"manual-{booking_id}",
+            'processed_by': ObjectId(current_user['id']),
+            'created_at': datetime.now(),
+            'updated_at': datetime.now(),
+            'paid_at': datetime.now()
+        }
+        
+        db.payments.insert_one(payment_record)
+        print(f"✅ Payment record created for manual booking: {booking_id}")
         
         # Get the complete booking with populated data
         new_booking = db.bookings.aggregate([

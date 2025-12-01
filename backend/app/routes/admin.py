@@ -1105,3 +1105,179 @@ def generate_comprehensive_csv(start_date=None, end_date=None):
 def generate_bookings_csv():
     """Generate CSV data from REAL bookings (legacy function)"""
     return generate_comprehensive_csv()
+
+
+
+@admin_bp.route('/customers', methods=['GET'])
+@jwt_required()
+def get_customers():
+    """Get all customers with their booking statistics"""
+    try:
+        if not is_admin():
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        # Get registered customers from users collection
+        customers = list(mongo.db.users.find({
+            'role': 'customer',
+            'is_active': True
+        }).sort('created_at', -1))
+
+        customers_data = []
+        for customer in customers:
+            customer_data = serialize_doc(customer)
+            customer_id = customer['_id']
+            
+            # Build comprehensive match conditions
+            match_conditions = [
+                {'user_id': customer_id},  # ObjectId format
+                {'user_id': str(customer_id)},  # String format
+            ]
+            
+            # Phone matching with multiple formats
+            customer_phone = customer.get('phone')
+            if customer_phone:
+                # Normalize phone and try all Ethiopian formats
+                normalized_phone = customer_phone.strip()
+                match_conditions.append({'passenger_phone': normalized_phone})
+                
+                # Handle Ethiopian phone formats
+                if normalized_phone.startswith('0'):
+                    # 0900469816 -> +251900469816, 251900469816
+                    match_conditions.append({'passenger_phone': '+251' + normalized_phone[1:]})
+                    match_conditions.append({'passenger_phone': '251' + normalized_phone[1:]})
+                elif normalized_phone.startswith('251'):
+                    # 251900469816 -> +251900469816, 0900469816
+                    match_conditions.append({'passenger_phone': '+' + normalized_phone})
+                    match_conditions.append({'passenger_phone': '0' + normalized_phone[3:]})
+                elif normalized_phone.startswith('+251'):
+                    # +251900469816 -> 251900469816, 0900469816
+                    match_conditions.append({'passenger_phone': normalized_phone[1:]})
+                    match_conditions.append({'passenger_phone': '0' + normalized_phone[4:]})
+            
+            if customer.get('email'):
+                match_conditions.append({'passenger_email': customer.get('email')})
+            
+            match_query = {'$or': match_conditions}
+            
+            # Find all matching bookings directly
+            all_bookings = list(mongo.db.bookings.find(match_query))
+            
+            # Calculate stats from the found bookings
+            total_bookings = len(all_bookings)
+            last_booking = max([b.get('created_at') or b.get('booked_at') for b in all_bookings], default=None) if all_bookings else None
+            total_spent = sum([b.get('total_amount', 0) for b in all_bookings if b.get('status') != 'cancelled'])
+            
+            # Calculate completed trips (past travel dates with confirmed/completed status)
+            from datetime import datetime
+            current_time = datetime.utcnow()
+            completed_trips = 0
+            for booking in all_bookings:
+                if booking.get('status') in ['confirmed', 'completed', 'checked_in']:
+                    travel_date = booking.get('travel_date') or booking.get('departure_date')
+                    if travel_date:
+                        try:
+                            if isinstance(travel_date, str):
+                                travel_date = datetime.fromisoformat(travel_date.replace('Z', '+00:00'))
+                            if travel_date < current_time:
+                                completed_trips += 1
+                        except:
+                            pass
+            
+            # Loyalty points calculation: (total_bookings * 100) + (completed_trips * 50)
+            loyalty_points = (total_bookings * 100) + (completed_trips * 50)
+            
+            customer_data['booking_count'] = total_bookings
+            customer_data['completed_trips'] = completed_trips
+            customer_data['loyalty_points'] = loyalty_points
+            customer_data['last_booking'] = last_booking
+            customer_data['total_spent'] = total_spent
+            
+            customers_data.append(customer_data)
+
+        return jsonify({
+            'success': True,
+            'customers': customers_data
+        }), 200
+
+    except Exception as e:
+        print(f"❌ Error in get_customers: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@admin_bp.route('/customer/<string:customer_id>/bookings', methods=['GET'])
+@admin_bp.route('/customer/id/<string:customer_id>/bookings', methods=['GET'])
+@jwt_required()
+def get_customer_bookings(customer_id):
+    """Get all bookings for a specific customer"""
+    try:
+        if not is_admin():
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        # Get customer info
+        customer = None
+        try:
+            customer = mongo.db.users.find_one({'_id': ObjectId(customer_id)})
+        except:
+            pass
+        
+        # PRIMARY: Match by user_id
+        match_conditions = []
+        
+        try:
+            if len(customer_id) == 24:
+                match_conditions.append({'user_id': ObjectId(customer_id)})
+                match_conditions.append({'user_id': customer_id})  # String format
+        except:
+            pass
+        
+        # FALLBACK: Match by phone/email for unmigrated bookings
+        if customer:
+            customer_phone = customer.get('phone')
+            customer_email = customer.get('email')
+            
+            if customer_phone:
+                # Normalize phone and try all Ethiopian formats
+                normalized_phone = customer_phone.strip()
+                match_conditions.append({'passenger_phone': normalized_phone})
+                
+                # Handle Ethiopian phone formats
+                if normalized_phone.startswith('0'):
+                    # 0900469816 -> +251900469816, 251900469816
+                    match_conditions.append({'passenger_phone': '+251' + normalized_phone[1:]})
+                    match_conditions.append({'passenger_phone': '251' + normalized_phone[1:]})
+                elif normalized_phone.startswith('251'):
+                    # 251900469816 -> +251900469816, 0900469816
+                    match_conditions.append({'passenger_phone': '+' + normalized_phone})
+                    match_conditions.append({'passenger_phone': '0' + normalized_phone[3:]})
+                elif normalized_phone.startswith('+251'):
+                    # +251900469816 -> 251900469816, 0900469816
+                    match_conditions.append({'passenger_phone': normalized_phone[1:]})
+                    match_conditions.append({'passenger_phone': '0' + normalized_phone[4:]})
+            
+            if customer_email:
+                match_conditions.append({'passenger_email': customer_email})
+        
+        match_query = {'$or': match_conditions} if match_conditions else {}
+        
+        # Fetch bookings
+        bookings = list(mongo.db.bookings.find(match_query).sort('created_at', -1).limit(50))
+        
+        bookings_data = []
+        for booking in bookings:
+            schedule = mongo.db.busschedules.find_one({'_id': ObjectId(booking['schedule_id'])})
+
+            booking_data = serialize_doc(booking)
+            
+            if schedule:
+                booking_data['schedule'] = serialize_doc(schedule)
+            
+            bookings_data.append(booking_data)
+
+        return jsonify({
+            'success': True,
+            'bookings': bookings_data
+        }), 200
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500

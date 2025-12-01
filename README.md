@@ -1,499 +1,447 @@
-# 🚌 Bus Reservation System
+# 🚌 EthioBus - Bus Booking & Management System
 
-A comprehensive full-stack bus ticket booking and management system built with Flask backend and React frontend. This system provides a complete solution for bus operators, ticketing agents, drivers, and passengers.
+A comprehensive bus ticket booking and management platform designed for Ethiopian bus transportation services. Built with modern web technologies to streamline bus operations, ticket booking, and passenger management.
 
-## 📑 Table of Contents
+## � Table  of Contents
 
 - [Features](#-features)
 - [Tech Stack](#-tech-stack)
 - [Project Structure](#-project-structure)
+- [Prerequisites](#-prerequisites)
 - [Installation](#-installation)
 - [Configuration](#-configuration)
+- [Running the Application](#-running-the-application)
 - [API Documentation](#-api-documentation)
 - [User Roles](#-user-roles)
-- [Screenshots](#-screenshots)
+- [Payment Integration](#-payment-integration)
+- [Contributing](#-contributing)
+- [License](#-license)
 
 ## ✨ Features
 
-### For Passengers
-- 🔍 Search and browse available bus schedules
-- 🎫 Book tickets with seat selection
-- 💳 Secure payment processing (Chapa integration)
-- 📱 Digital ticket with QR code
-- �️ Real-time bus tracking
-- ✅ Online check-in
-- 🚫 Booking cancellation with refund management
-- �️ Email notifications for bookings
-- � User pr ofile and booking history
-
-### For Ticketing Agents
-- 🏪 Point of Sale (POS) system
-- ⚡ Quick booking interface
-- � ScheduSle browser
-- 👥 Customer management
-- 🔍 Booking lookup and modifications
-- 💰 Payment collection
+### For Customers
+- 🎫 **Online Ticket Booking** - Search and book bus tickets with real-time seat availability
+- 📱 **QR Code Tickets** - Digital tickets with QR codes for easy check-in
+- � *o*Multiple Payment Options** - Support for TeleBirr, CBE Birr, HelloCash, and international cards
+- 📊 **Booking History** - Track all your past and upcoming trips
+- 🔔 **Notifications** - Real-time updates on booking confirmations and schedule changes
+- 🎁 **Loyalty Program** - Earn rewards for frequent bookings
 
 ### For Operators
-- 📊 Operator dashboard with analytics
-- 📅 Schedule management
-- 🚌 Bus tracking and monitoring
-- ✅ Passenger check-in management
-- 📝 Cancellation request handling
-- 📈 Revenue and booking reports
-- 💵 Tariff management
+- 🚍 **Bus Management** - Add, edit, and manage bus fleet information
+- 🗺️ **Route Management** - Create and manage bus routes with multiple stops
+- ⏰ **Schedule Management** - Set up recurring and one-time schedules
+- � **Driverl Assignment** - Assign drivers to specific schedules
+- �  **Analytics Dashboard** - View booking statistics and revenue reports
+- 🎟️ **Ticketer System** - Dedicated interface for ticket verification and check-in
 
 ### For Drivers
-- 🚗 Driver check-in system
-- 📍 Active trip management
-- 👥 Passenger list and verification
-- 🗓️ Schedule viewing
-- 📱 Trip details and navigation
+- � **Driuver Mobile App** - Dedicated interface for drivers
+- ✅ **Passenger Check-in** - Scan QR codes to verify tickets
+- 🗺️ **Route Information** - View assigned routes and schedules
+- � **Treip Reports** - Track completed trips and passenger counts
 
-### For Administrators
-- 👥 User management (all roles)
-- 🚌 Bus fleet management
-- 🗺️ Route management
-- 📅 Schedule creation and management
-- 💰 Payment and transaction monitoring
-- 📊 Comprehensive reports and analytics
-- ⚙️ System settings and configuration
-- 💵 Dynamic tariff management
+### For Admins
+- 👤 **User Management** - Manage all system users and roles
+- 💰 **Payment Tracking** - Monitor all transactions and refunds
+- � **Emer gency Controls** - Cancel schedules and handle emergencies
+- ⚙️ **System Settings** - Configure tariffs, fees, and system parameters
+- � **sComprehensive Reports** - Generate detailed analytics and reports
 
-## 🛠 Tech Stack
-
-### Backend
-- **Framework:** Flask (Python)
-- **Database:** MongoDB
-- **Authentication:** JWT (JSON Web Tokens)
-- **Payment Gateway:** Chapa
-- **Email Service:** SMTP
-- **API:** RESTful API
+## � Tec h Stack
 
 ### Frontend
-- **Framework:** React 18
-- **Build Tool:** Vite
-- **Styling:** Tailwind CSS
-- **Routing:** React Router v6
-- **HTTP Client:** Axios
-- **State Management:** React Context API
+- **React 18** - Modern UI library
+- **Vite** - Fast build tool and dev server
+- **React Router** - Client-side routing
+- **Tailwind CSS** - Utility-first CSS framework
+- **Axios** - HTTP client
+- **Chart.js & Recharts** - Data visualization
+- **React Hook Form** - Form management
+- **QRCode.react** - QR code generation
+- **React Toastify** - Toast notifications
+- **Lucide React** - Icon library
+
+### Backend
+- **Flask 2.3** - Python web framework
+- **MongoDB** - NoSQL database
+- **PyMongo** - MongoDB driver
+- **Flask-JWT-Extended** - JWT authentication
+- **Flask-Bcrypt** - Password hashing
+- **Flask-CORS** - Cross-origin resource sharing
+- **Stripe** - Payment processing (international)
+
+### Payment Gateways
+- Chapa (TeleBirr, CBE Birr, HelloCash)
+- Stripe (International cards)
+- Cash payments
 
 ## 📁 Project Structure
 
 ```
-bus-reservation-system/
-├── backend/
+ethiobus/
+├── backend/                    # Flask backend application
 │   ├── app/
-│   │   ├── routes/
-│   │   │   ├── admin.py           # Admin management endpoints
-│   │   │   ├── auth.py            # Authentication endpoints
-│   │   │   ├── booking.py         # Booking management
-│   │   │   ├── bus.py             # Bus fleet management
-│   │   │   ├── checkin.py         # Check-in system
-│   │   │   ├── driver.py          # Driver endpoints
-│   │   │   ├── emergency_cancel.py # Emergency cancellations
-│   │   │   ├── operator.py        # Operator management
-│   │   │   ├── payment.py         # Payment processing
-│   │   │   ├── route.py           # Route management
-│   │   │   ├── schedule.py        # Schedule management
-│   │   │   ├── tariff.py          # Tariff management
-│   │   │   ├── ticketer.py        # Ticketing agent endpoints
-│   │   │   ├── tracking.py        # Bus tracking
-│   │   │   └── user.py            # User management
-│   │   ├── utils/
-│   │   │   ├── email_service.py   # Email notifications
-│   │   │   ├── travel_calculator.py # Distance/fare calculations
-│   │   │   └── validators.py      # Input validation
-│   │   ├── models.py              # Database models
-│   │   └── __init__.py            # Flask app initialization
-│   ├── config/                    # Configuration files
-│   ├── middleware/                # Custom middleware
-│   ├── .env                       # Environment variables
-│   ├── requirements.txt           # Python dependencies
-│   └── run.py                     # Application entry point
+│   │   ├── routes/            # API route handlers
+│   │   ├── utils/             # Utility functions
+│   │   ├── models.py          # Data models and enums
+│   │   └── __init__.py        # App factory
+│   ├── config/                # Configuration files
+│   ├── middleware/            # Custom middleware
+│   ├── .env                   # Environment variables
+│   ├── requirements.txt       # Python dependencies
+│   └── run.py                 # Application entry point
 │
-├── frontend/
+├── frontend/                  # React frontend application
 │   ├── src/
-│   │   ├── components/
-│   │   │   ├── auth/              # Authentication components
-│   │   │   ├── booking/           # Booking flow components
-│   │   │   ├── common/            # Reusable UI components
-│   │   │   └── tracking/          # Tracking components
-│   │   ├── pages/
-│   │   │   ├── admin/             # Admin dashboard pages
-│   │   │   ├── auth/              # Login/Register pages
-│   │   │   ├── booking/           # Booking pages
-│   │   │   ├── customer/          # Customer dashboard
-│   │   │   ├── driver/            # Driver dashboard
-│   │   │   ├── home/              # Public pages
-│   │   │   ├── operator/          # Operator dashboard
-│   │   │   ├── ticketer/          # Ticketer dashboard
-│   │   │   └── shared/            # Shared pages
-│   │   ├── services/              # API service modules
-│   │   ├── hooks/                 # Custom React hooks
-│   │   ├── utils/                 # Utility functions
-│   │   ├── styles/                # CSS files
-│   │   ├── App.jsx                # Main app component
-│   │   ├── routes.jsx             # Route definitions
-│   │   └── main.jsx               # Entry point
-│   ├── public/                    # Static assets
-│   ├── .env                       # Environment variables
-│   ├── package.json               # Node dependencies
-│   ├── vite.config.js             # Vite configuration
-│   └── tailwind.config.js         # Tailwind configuration
+│   │   ├── components/        # Reusable UI components
+│   │   ├── pages/             # Page components
+│   │   ├── contexts/          # React contexts
+│   │   ├── hooks/             # Custom React hooks
+│   │   ├── services/          # API service layer
+│   │   ├── utils/             # Utility functions
+│   │   ├── styles/            # CSS and styling
+│   │   ├── App.jsx            # Main app component
+│   │   └── main.jsx           # Application entry point
+│   ├── public/                # Static assets
+│   ├── .env                   # Environment variables
+│   ├── package.json           # Node dependencies
+│   ├── vite.config.js         # Vite configuration
+│   └── tailwind.config.js     # Tailwind configuration
 │
-├── .gitignore
-└── README.md
+└── README.md                  # Project documentation
 ```
+
+## 📦 Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+- **Node.js** (v16 or higher)
+- **Python** (v3.8 or higher)
+- **MongoDB** (v4.4 or higher)
+- **npm** or **yarn**
+- **pip** (Python package manager)
 
 ## 🚀 Installation
 
-### Prerequisites
-- Python 3.8+
-- Node.js 16+
-- MongoDB 4.4+
-- Git
+### 1. Clone the Repository
 
-### Backend Setup
-
-1. Clone the repository:
 ```bash
-git clone https://github.com/abre0101/bus-reservation-system.git
-cd bus-reservation-system
+git clone https://github.com/yourusername/ethiobus.git
+cd ethiobus
 ```
 
-2. Create and activate virtual environment:
-```bash
-# Windows
-python -m venv .venv
-.venv\Scripts\activate
+### 2. Backend Setup
 
-# Linux/Mac
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-3. Install dependencies:
 ```bash
+# Navigate to backend directory
 cd backend
+
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# On Windows:
+venv\Scripts\activate
+# On macOS/Linux:
+source venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-4. Configure environment variables (see [Configuration](#-configuration))
+### 3. Frontend Setup
 
-5. Initialize database (optional - load sample data):
 ```bash
-python insertFullData.py
-```
-
-6. Run the backend server:
-```bash
-python run.py
-```
-
-The backend API will be available at `http://localhost:5000`
-
-### Frontend Setup
-
-1. Navigate to frontend directory:
-```bash
+# Navigate to frontend directory
 cd frontend
-```
 
-2. Install dependencies:
-```bash
+# Install dependencies
 npm install
+# or
+yarn install
 ```
-
-3. Configure environment variables (see [Configuration](#-configuration))
-
-4. Run the development server:
-```bash
-npm run dev
-```
-
-The frontend will be available at `http://localhost:5173`
 
 ## ⚙️ Configuration
 
-### Backend Environment Variables
+### Backend Configuration
 
-Create a `.env` file in the `backend/` directory:
+Create a `.env` file in the `backend` directory:
 
 ```env
 # Flask Configuration
-FLASK_APP=run.py
-FLASK_ENV=development
 SECRET_KEY=your-secret-key-here
+DEBUG=True
+PORT=5000
 
-# MongoDB Configuration
-MONGO_URI=mongodb://localhost:27017/bus_reservation
+# Database Configuration
+MONGO_URI=mongodb://localhost:27017/ethiobusdb
 
 # JWT Configuration
-JWT_SECRET_KEY=your-jwt-secret-key
+JWT_SECRET_KEY=your-jwt-secret-key-here
 
-# Email Configuration (SMTP)
-MAIL_SERVER=smtp.gmail.com
-MAIL_PORT=587
-MAIL_USE_TLS=True
-MAIL_USERNAME=your-email@gmail.com
-MAIL_PASSWORD=your-app-password
-
-# Chapa Payment Gateway
+# Chapa Payment Configuration (Ethiopian Payment Gateway)
 CHAPA_SECRET_KEY=your-chapa-secret-key
 CHAPA_PUBLIC_KEY=your-chapa-public-key
+CHAPA_BASE_URL=https://api.chapa.co/v1
 
-# Application Settings
-FRONTEND_URL=http://localhost:5173
-BACKEND_URL=http://localhost:5000
+# Stripe Configuration (International Payments)
+STRIPE_SECRET_KEY=your-stripe-secret-key
+STRIPE_PUBLIC_KEY=your-stripe-public-key
 ```
 
-### Frontend Environment Variables
+### Frontend Configuration
 
-Create a `.env` file in the `frontend/` directory:
+Create a `.env` file in the `frontend` directory:
 
 ```env
-VITE_API_URL=http://localhost:5000/api
+# API Configuration
+VITE_API_URL=http://localhost:5000
+
+# Payment Configuration
 VITE_CHAPA_PUBLIC_KEY=your-chapa-public-key
+VITE_STRIPE_PUBLIC_KEY=your-stripe-public-key
 ```
+
+### MongoDB Setup
+
+1. Install MongoDB on your system
+2. Start MongoDB service:
+   ```bash
+   # Windows
+   net start MongoDB
+   
+   # macOS
+   brew services start mongodb-community
+   
+   # Linux
+   sudo systemctl start mongod
+   ```
+
+3. The database `ethiobusdb` will be created automatically on first run
+
+## 🏃 Running the Application
+
+### Start Backend Server
+
+```bash
+cd backend
+python run.py
+```
+
+The backend server will start on `http://localhost:5000`
+
+### Start Frontend Development Server
+
+```bash
+cd frontend
+npm run dev
+# or
+yarn dev
+```
+
+The frontend will start on `http://localhost:5173`
+
+### Access the Application
+
+Open your browser and navigate to:
+- **Frontend**: http://localhost:5173
+- **Backend API**: http://localhost:5000
+- **Health Check**: http://localhost:5000/
 
 ## 📚 API Documentation
 
 ### Base URL
 ```
-http://localhost:5000/api
+http://localhost:5000
 ```
 
-### Authentication Endpoints
+### Main Endpoints
 
-#### Register User
-```http
-POST /api/auth/register
-Content-Type: application/json
+#### Authentication
+- `POST /auth/register` - Register new user
+- `POST /auth/login` - User login
+- `POST /auth/logout` - User logout
+- `GET /auth/profile` - Get user profile
 
-{
-  "email": "user@example.com",
-  "password": "password123",
-  "full_name": "John Doe",
-  "phone": "+251912345678"
-}
-```
+#### Bookings
+- `GET /bookings` - Get all bookings
+- `POST /bookings` - Create new booking
+- `GET /bookings/:id` - Get booking details
+- `PUT /bookings/:id` - Update booking
+- `DELETE /bookings/:id` - Cancel booking
 
-#### Login
-```http
-POST /api/auth/login
-Content-Type: application/json
+#### Schedules
+- `GET /schedules` - Get all schedules
+- `POST /schedules` - Create schedule (operator/admin)
+- `GET /schedules/:id` - Get schedule details
+- `PUT /schedules/:id` - Update schedule
+- `DELETE /schedules/:id` - Delete schedule
 
-{
-  "email": "user@example.com",
-  "password": "password123"
-}
+#### Routes
+- `GET /routes` - Get all routes
+- `POST /routes` - Create route (operator/admin)
+- `GET /routes/:id` - Get route details
+- `PUT /routes/:id` - Update route
 
-Response:
-{
-  "token": "jwt-token",
-  "user": {
-    "id": "user-id",
-    "email": "user@example.com",
-    "role": "customer"
-  }
-}
-```
+#### Buses
+- `GET /buses` - Get all buses
+- `POST /buses` - Add new bus (operator/admin)
+- `GET /buses/:id` - Get bus details
+- `PUT /buses/:id` - Update bus
 
-### Booking Endpoints
+#### Payments
+- `POST /payments/initialize` - Initialize payment
+- `POST /payments/verify` - Verify payment
+- `GET /payments/:id` - Get payment details
 
-#### Search Schedules
-```http
-GET /api/schedules/search?origin=Addis Ababa&destination=Bahir Dar&date=2024-12-01
-```
-
-#### Create Booking
-```http
-POST /api/bookings
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "schedule_id": "schedule-id",
-  "passenger_details": {
-    "full_name": "John Doe",
-    "phone": "+251912345678",
-    "email": "john@example.com"
-  },
-  "seat_numbers": ["A1", "A2"],
-  "baggage": {
-    "count": 2,
-    "weight": 25
-  }
-}
-```
-
-#### Get User Bookings
-```http
-GET /api/bookings/my-bookings
-Authorization: Bearer {token}
-```
-
-#### Cancel Booking
-```http
-POST /api/bookings/{booking_id}/cancel
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "reason": "Change of plans"
-}
-```
-
-### Schedule Endpoints
-
-#### Get All Schedules
-```http
-GET /api/schedules
-```
-
-#### Get Schedule Details
-```http
-GET /api/schedules/{schedule_id}
-```
-
-#### Create Schedule (Admin/Operator)
-```http
-POST /api/schedules
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "route_id": "route-id",
-  "bus_id": "bus-id",
-  "driver_id": "driver-id",
-  "departure_time": "2024-12-01T08:00:00",
-  "arrival_time": "2024-12-01T14:00:00",
-  "base_price": 500
-}
-```
-
-### Payment Endpoints
-
-#### Initialize Payment
-```http
-POST /api/payments/initialize
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "booking_id": "booking-id",
-  "amount": 1000,
-  "payment_method": "chapa"
-}
-```
-
-#### Verify Payment
-```http
-GET /api/payments/verify/{transaction_id}
-Authorization: Bearer {token}
-```
-
-### Tracking Endpoints
-
-#### Get Bus Location
-```http
-GET /api/tracking/bus/{bus_id}/location
-Authorization: Bearer {token}
-```
-
-#### Update Bus Location (Driver)
-```http
-POST /api/tracking/update-location
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "schedule_id": "schedule-id",
-  "latitude": 9.0320,
-  "longitude": 38.7469
-}
-```
-
-### Admin Endpoints
-
-#### Get All Users
-```http
-GET /api/admin/users
-Authorization: Bearer {token}
-```
-
-#### Create Bus
-```http
-POST /api/admin/buses
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "plate_number": "AA-12345",
-  "bus_type": "Standard",
-  "capacity": 45,
-  "operator_id": "operator-id"
-}
-```
-
-#### Create Route
-```http
-POST /api/admin/routes
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "origin": "Addis Ababa",
-  "destination": "Bahir Dar",
-  "distance_km": 565,
-  "duration_hours": 6,
-  "stops": ["Debre Markos"]
-}
-```
+#### Admin
+- `GET /admin/users` - Get all users
+- `PUT /admin/users/:id` - Update user
+- `DELETE /admin/users/:id` - Delete user
+- `GET /admin/statistics` - Get system statistics
 
 ## 👥 User Roles
 
-The system supports four main user roles:
+### Customer
+- Book tickets
+- View booking history
+- Make payments
+- Receive notifications
 
-1. **Customer** - Book tickets, manage bookings, track buses
-2. **Ticketing Agent** - Sell tickets at physical locations
-3. **Operator** - Manage schedules, buses, and operations
-4. **Driver** - Check-in, manage trips, view passenger lists
-5. **Admin** - Full system access and management
+### Driver
+- View assigned schedules
+- Check-in passengers
+- Update trip status
+- View route information
 
-## 🖼️ Screenshots
+### Operator
+- Manage buses
+- Create routes and schedules
+- Assign drivers
+- View analytics
 
-> Add screenshots of your application here
+### Admin
+- Full system access
+- User management
+- System configuration
+- Emergency controls
 
-### Home Page
-![Home Page](screenshots/home.png)
+## 💳 Payment Integration
 
-### Booking Flow
-![Search](screenshots/search.png)
-![Seat Selection](screenshots/seats.png)
-![Payment](screenshots/payment.png)
+### Supported Payment Methods
 
-### Dashboards
-![Customer Dashboard](screenshots/customer-dashboard.png)
-![Operator Dashboard](screenshots/operator-dashboard.png)
-![Admin Dashboard](screenshots/admin-dashboard.png)
+1. **TeleBirr** - Ethiopian mobile money
+2. **CBE Birr** - Commercial Bank of Ethiopia mobile banking
+3. **HelloCash** - Ethiopian mobile wallet
+4. **Bank Transfer** - Direct bank transfers
+5. **Stripe** - International credit/debit cards
+6. **Cash** - Pay at station
+
+### Payment Flow
+
+1. Customer selects seats and proceeds to payment
+2. System calculates total amount (base fare + fees)
+3. Customer chooses payment method
+4. Payment gateway processes transaction
+5. System verifies payment and confirms booking
+6. Customer receives ticket with QR code
+
+## 🧪 Testing
+
+### Backend Tests
+```bash
+cd backend
+pytest
+```
+
+### Frontend Tests
+```bash
+cd frontend
+npm run test
+# or
+yarn test
+```
+
+## 🔒 Security Features
+
+- JWT-based authentication
+- Password hashing with bcrypt
+- CORS protection
+- Input validation and sanitization
+- Secure payment processing
+- Role-based access control
+
+## 🌐 Deployment
+
+### Backend Deployment (Example with Heroku)
+
+```bash
+# Login to Heroku
+heroku login
+
+# Create new app
+heroku create ethiobus-api
+
+# Set environment variables
+heroku config:set SECRET_KEY=your-secret-key
+heroku config:set MONGO_URI=your-mongodb-uri
+
+# Deploy
+git push heroku main
+```
+
+### Frontend Deployment (Example with Vercel)
+
+```bash
+# Install Vercel CLI
+npm install -g vercel
+
+# Deploy
+cd frontend
+vercel
+```
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please follow these steps:
 
-## 📄 License
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
-This project is licensed under the MIT License.
+## 📝 License
 
-## 👨‍💻 Author
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-**Abraham Worku**
-- GitHub: [@abre0101](https://github.com/abre0101)
-- Email: Abrahamworku10a@gmail.com
+## 👨‍💻 Authors
+
+- Your Name - Initial work
 
 ## 🙏 Acknowledgments
 
-- Ethiopian bus operators for inspiration
-- Open source community for amazing tools and libraries
+- Ethiopian bus transportation industry
+- Open source community
+- All contributors
+
+## 📞 Support
+
+For support, email support@ethiobus.com or join our Slack channel.
+
+## 🗺️ Roadmap
+
+- [ ] Mobile app for iOS and Android
+- [ ] Real-time bus tracking with GPS
+- [ ] Multi-language support (Amharic, Oromo, Tigrinya)
+- [ ] Advanced analytics and reporting
+- [ ] Integration with more payment gateways
+- [ ] Customer review and rating system
+- [ ] Automated refund processing
+- [ ] SMS notifications
+- [ ] WhatsApp integration
+
+---
+
+Made with ❤️ for Ethiopian bus transportation

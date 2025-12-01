@@ -192,15 +192,15 @@ const AdminDashboard = () => {
   const StatCard = ({ icon, label, value, subValue, color, onClick }) => (
     <div 
       onClick={onClick}
-      className={`bg-white rounded-lg shadow-md p-6 border-l-4 ${color} ${onClick ? 'cursor-pointer hover:shadow-lg' : ''} transition-shadow`}
+      className={`bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg hover:shadow-xl p-6 border-l-4 ${color} ${onClick ? 'cursor-pointer transform hover:scale-105' : ''} transition-all duration-300`}
     >
       <div className="flex items-center justify-between">
         <div className="flex-1">
-          <p className="text-gray-600 text-sm font-medium mb-1">{label}</p>
-          <p className="text-3xl font-bold text-gray-900">{value}</p>
-          {subValue && <p className="text-sm text-gray-500 mt-1">{subValue}</p>}
+          <p className="text-gray-600 text-sm font-medium mb-2">{label}</p>
+          <p className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">{value}</p>
+          {subValue && <p className="text-sm text-gray-500 mt-2">{subValue}</p>}
         </div>
-        <div className="text-5xl opacity-20">{icon}</div>
+        <div className="text-5xl opacity-30 transform hover:scale-110 transition-transform">{icon}</div>
       </div>
     </div>
   )
@@ -353,52 +353,52 @@ const AdminDashboard = () => {
       </div>
 
       {/* Bus Status Chart */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Bus Fleet Status</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-green-50 rounded-lg p-4 border-l-4 border-green-500">
+      <div className="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg p-6">
+        <h2 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-6">Bus Fleet Status</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-5 border-l-4 border-green-500 shadow-md hover:shadow-lg transition-shadow">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Active Buses</p>
-                <p className="text-2xl font-bold text-green-600">{busStatus.active}</p>
+                <p className="text-sm text-gray-700 font-medium">Active Buses</p>
+                <p className="text-3xl font-bold text-green-600 mt-1">{busStatus.active}</p>
               </div>
-              <div className="text-4xl">🟢</div>
+              <div className="text-5xl">🟢</div>
             </div>
-            <div className="mt-2 bg-green-200 rounded-full h-2">
+            <div className="mt-3 bg-green-200 rounded-full h-3 overflow-hidden">
               <div 
-                className="bg-green-600 h-2 rounded-full" 
+                className="bg-gradient-to-r from-green-500 to-green-600 h-3 rounded-full transition-all duration-500" 
                 style={{ width: `${(busStatus.active / stats.totalBuses) * 100}%` }}
               ></div>
             </div>
           </div>
 
-          <div className="bg-yellow-50 rounded-lg p-4 border-l-4 border-yellow-500">
+          <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-xl p-5 border-l-4 border-yellow-500 shadow-md hover:shadow-lg transition-shadow">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Under Maintenance</p>
-                <p className="text-2xl font-bold text-yellow-600">{busStatus.maintenance}</p>
+                <p className="text-sm text-gray-700 font-medium">Under Maintenance</p>
+                <p className="text-3xl font-bold text-yellow-600 mt-1">{busStatus.maintenance}</p>
               </div>
-              <div className="text-4xl">🟡</div>
+              <div className="text-5xl">🟡</div>
             </div>
-            <div className="mt-2 bg-yellow-200 rounded-full h-2">
+            <div className="mt-3 bg-yellow-200 rounded-full h-3 overflow-hidden">
               <div 
-                className="bg-yellow-600 h-2 rounded-full" 
+                className="bg-gradient-to-r from-yellow-500 to-yellow-600 h-3 rounded-full transition-all duration-500" 
                 style={{ width: `${(busStatus.maintenance / stats.totalBuses) * 100}%` }}
               ></div>
             </div>
           </div>
 
-          <div className="bg-red-50 rounded-lg p-4 border-l-4 border-red-500">
+          <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-5 border-l-4 border-red-500 shadow-md hover:shadow-lg transition-shadow">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Inactive Buses</p>
-                <p className="text-2xl font-bold text-red-600">{busStatus.inactive}</p>
+                <p className="text-sm text-gray-700 font-medium">Inactive Buses</p>
+                <p className="text-3xl font-bold text-red-600 mt-1">{busStatus.inactive}</p>
               </div>
-              <div className="text-4xl">🔴</div>
+              <div className="text-5xl">🔴</div>
             </div>
-            <div className="mt-2 bg-red-200 rounded-full h-2">
+            <div className="mt-3 bg-red-200 rounded-full h-3 overflow-hidden">
               <div 
-                className="bg-red-600 h-2 rounded-full" 
+                className="bg-gradient-to-r from-red-500 to-red-600 h-3 rounded-full transition-all duration-500" 
                 style={{ width: `${(busStatus.inactive / stats.totalBuses) * 100}%` }}
               ></div>
             </div>
@@ -408,29 +408,29 @@ const AdminDashboard = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Bookings */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-gray-900">Recent Bookings</h2>
+        <div className="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">Recent Bookings</h2>
             <button
               onClick={() => navigate('/admin/bookings')}
-              className="text-indigo-600 hover:text-indigo-700 text-sm font-medium"
+              className="text-indigo-600 hover:text-indigo-700 text-sm font-medium flex items-center gap-1 hover:gap-2 transition-all"
             >
-              View All →
+              View All <span>→</span>
             </button>
           </div>
           {recentBookings.length > 0 ? (
             <div className="space-y-3">
               {recentBookings.map((booking) => (
-                <div key={booking._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                <div key={booking._id} className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl hover:shadow-md transition-all duration-300 border border-gray-100">
                   <div className="flex-1">
                     <p className="font-semibold text-gray-900">{booking.passenger_name}</p>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-gray-600 mt-1">
                       {booking.departure_city} → {booking.arrival_city}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-gray-900">{booking.total_amount} ETB</p>
-                    <span className={`text-xs px-2 py-1 rounded-full ${
+                    <p className="font-bold text-gray-900">{booking.total_amount} ETB</p>
+                    <span className={`text-xs px-3 py-1 rounded-full font-medium mt-1 inline-block ${
                       booking.status === 'confirmed' ? 'bg-green-100 text-green-800' :
                       booking.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
                       'bg-gray-100 text-gray-800'
@@ -447,23 +447,23 @@ const AdminDashboard = () => {
         </div>
 
         {/* Recent Users */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-gray-900">Recent Users</h2>
+        <div className="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">Recent Users</h2>
             <button
               onClick={() => navigate('/admin/users')}
-              className="text-indigo-600 hover:text-indigo-700 text-sm font-medium"
+              className="text-indigo-600 hover:text-indigo-700 text-sm font-medium flex items-center gap-1 hover:gap-2 transition-all"
             >
-              View All →
+              View All <span>→</span>
             </button>
           </div>
           {recentUsers.length > 0 ? (
             <div className="space-y-3">
               {recentUsers.map((user) => (
-                <div key={user._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                <div key={user._id} className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl hover:shadow-md transition-all duration-300 border border-gray-100">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                      <span className="text-indigo-600 font-semibold">
+                    <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center shadow-md">
+                      <span className="text-white font-bold text-lg">
                         {(user.name || user.email)?.charAt(0).toUpperCase()}
                       </span>
                     </div>
@@ -472,7 +472,7 @@ const AdminDashboard = () => {
                       <p className="text-sm text-gray-600">{user.email}</p>
                     </div>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full ${
+                  <span className={`text-xs px-3 py-1 rounded-full font-medium ${
                     user.role === 'admin' ? 'bg-purple-100 text-purple-800' :
                     user.role === 'driver' ? 'bg-blue-100 text-blue-800' :
                     user.role === 'operator' ? 'bg-green-100 text-green-800' :
@@ -490,20 +490,20 @@ const AdminDashboard = () => {
       </div>
 
       {/* Upcoming Schedules */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-gray-900">Upcoming Schedules</h2>
+      <div className="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">Upcoming Schedules</h2>
           <button
             onClick={() => navigate('/admin/schedules')}
-            className="text-indigo-600 hover:text-indigo-700 text-sm font-medium"
+            className="text-indigo-600 hover:text-indigo-700 text-sm font-medium flex items-center gap-1 hover:gap-2 transition-all"
           >
-            View All →
+            View All <span>→</span>
           </button>
         </div>
         {upcomingSchedules.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50">
+              <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
                 <tr>
                   <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Route</th>
                   <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Date</th>
@@ -515,7 +515,7 @@ const AdminDashboard = () => {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {upcomingSchedules.map((schedule) => (
-                  <tr key={schedule._id} className="hover:bg-gray-50">
+                  <tr key={schedule._id} className="hover:bg-gradient-to-r hover:from-indigo-50 hover:to-purple-50 transition-all">
                     <td className="px-4 py-3">
                       <p className="font-medium text-gray-900">
                         {schedule.originCity || schedule.route?.origin} → {schedule.destinationCity || schedule.route?.destination}
@@ -534,7 +534,7 @@ const AdminDashboard = () => {
                       {schedule.booked_seats || schedule.bookedSeats || 0} / {schedule.totalSeats || schedule.availableSeats}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-1 text-xs rounded-full ${
+                      <span className={`px-3 py-1 text-xs rounded-full font-medium ${
                         schedule.status === 'scheduled' ? 'bg-blue-100 text-blue-800' :
                         schedule.status === 'in_progress' ? 'bg-green-100 text-green-800' :
                         'bg-gray-100 text-gray-800'
@@ -553,36 +553,36 @@ const AdminDashboard = () => {
       </div>
 
       {/* Quick Actions */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Quick Actions</h2>
+      <div className="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg p-6">
+        <h2 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-6">Quick Actions</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <button
             onClick={() => navigate('/admin/users')}
-            className="flex flex-col items-center p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+            className="flex flex-col items-center p-5 bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl hover:shadow-lg hover:scale-105 transition-all duration-300"
           >
-            <span className="text-3xl mb-2">👥</span>
-            <span className="text-sm font-medium text-gray-900">Manage Users</span>
+            <span className="text-4xl mb-3">👥</span>
+            <span className="text-sm font-semibold text-gray-900">Manage Users</span>
           </button>
           <button
             onClick={() => navigate('/admin/buses')}
-            className="flex flex-col items-center p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
+            className="flex flex-col items-center p-5 bg-gradient-to-br from-green-50 to-green-100 rounded-xl hover:shadow-lg hover:scale-105 transition-all duration-300"
           >
-            <span className="text-3xl mb-2">🚌</span>
-            <span className="text-sm font-medium text-gray-900">Manage Buses</span>
+            <span className="text-4xl mb-3">🚌</span>
+            <span className="text-sm font-semibold text-gray-900">Manage Buses</span>
           </button>
           <button
             onClick={() => navigate('/admin/schedules')}
-            className="flex flex-col items-center p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"
+            className="flex flex-col items-center p-5 bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl hover:shadow-lg hover:scale-105 transition-all duration-300"
           >
-            <span className="text-3xl mb-2">📅</span>
-            <span className="text-sm font-medium text-gray-900">Manage Schedules</span>
+            <span className="text-4xl mb-3">📅</span>
+            <span className="text-sm font-semibold text-gray-900">Manage Schedules</span>
           </button>
           <button
             onClick={() => navigate('/admin/reports')}
-            className="flex flex-col items-center p-4 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition-colors"
+            className="flex flex-col items-center p-5 bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-xl hover:shadow-lg hover:scale-105 transition-all duration-300"
           >
-            <span className="text-3xl mb-2">📊</span>
-            <span className="text-sm font-medium text-gray-900">View Reports</span>
+            <span className="text-4xl mb-3">📊</span>
+            <span className="text-sm font-semibold text-gray-900">View Reports</span>
           </button>
         </div>
       </div>

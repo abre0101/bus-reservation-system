@@ -72,31 +72,34 @@ const AdminSettings = () => {
     { id: 'checkin', name: 'Check-in', icon: '✅' },
     { id: 'booking', name: 'Booking Limits', icon: '📋' },
     { id: 'payment', name: 'Payment', icon: '💳' },
+    { id: 'backend', name: 'Backend Config', icon: '🔧' },
     { id: 'general', name: 'General', icon: '⚙️' }
   ]
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">System Settings</h1>
-          <p className="text-gray-600">Configure system policies and limits</p>
-        </div>
-        <div className="flex gap-3">
-          <button onClick={handleReset} disabled={saving} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50">
-            Reset to Default
-          </button>
-          <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50">
-            {saving ? 'Saving...' : 'Save Changes'}
-          </button>
+      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl shadow-lg p-6 text-white">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">System Settings</h1>
+            <p className="text-indigo-100 mt-1">Configure system policies and limits</p>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={handleReset} disabled={saving} className="px-4 py-2 bg-white bg-opacity-20 text-white rounded-lg hover:bg-opacity-30 disabled:opacity-50 transition-all font-medium">
+              Reset to Default
+            </button>
+            <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-white text-indigo-600 rounded-lg hover:shadow-lg disabled:opacity-50 transition-all font-medium">
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        <div className="border-b border-gray-200">
+      <div className="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg overflow-hidden">
+        <div className="border-b border-gray-200 bg-white">
           <div className="flex overflow-x-auto">
             {tabs.map((tab) => (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`px-6 py-4 text-sm font-medium whitespace-nowrap ${activeTab === tab.id ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-600 hover:text-gray-900'}`}>
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`px-6 py-4 text-sm font-medium whitespace-nowrap transition-all ${activeTab === tab.id ? 'border-b-2 border-indigo-600 text-indigo-600 bg-indigo-50' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}>
                 <span className="mr-2">{tab.icon}</span>{tab.name}
               </button>
             ))}
@@ -110,6 +113,7 @@ const AdminSettings = () => {
           {activeTab === 'checkin' && <CheckinTab settings={settings} updateSetting={updateSetting} />}
           {activeTab === 'booking' && <BookingTab settings={settings} updateSetting={updateSetting} />}
           {activeTab === 'payment' && <PaymentTab settings={settings} updateSetting={updateSetting} />}
+          {activeTab === 'backend' && <BackendTab settings={settings} updateSetting={updateSetting} />}
           {activeTab === 'general' && <GeneralTab settings={settings} updateSetting={updateSetting} />}
         </div>
       </div>
@@ -242,6 +246,232 @@ const PaymentTab = ({ settings, updateSetting }) => (
     </div>
   </div>
 )
+
+const BackendTab = ({ settings, updateSetting }) => {
+  const backendSettings = settings.backend_config || {
+    api_rate_limit: 100,
+    session_timeout_minutes: 60,
+    max_upload_size_mb: 10,
+    enable_logging: true,
+    log_level: 'info',
+    enable_email_notifications: true,
+    enable_sms_notifications: false,
+    database_backup_enabled: true,
+    backup_frequency_hours: 24,
+    maintenance_mode: false,
+    api_version: 'v1',
+    cors_enabled: true,
+    jwt_expiry_hours: 24
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold">Backend Configuration</h3>
+        <div className="flex items-center gap-2">
+          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${backendSettings.maintenance_mode ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+            {backendSettings.maintenance_mode ? '🔧 Maintenance Mode' : '✅ Active'}
+          </span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-6">
+        {/* API Settings */}
+        <div className="col-span-2 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <h4 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
+            <span>🌐</span> API Configuration
+          </h4>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">API Rate Limit (req/min)</label>
+              <input 
+                type="number" 
+                value={backendSettings.api_rate_limit} 
+                onChange={(e) => updateSetting('backend_config', 'api_rate_limit', parseInt(e.target.value))} 
+                className="w-full px-4 py-2 border rounded-lg" 
+                min="10" 
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">API Version</label>
+              <input 
+                type="text" 
+                value={backendSettings.api_version} 
+                onChange={(e) => updateSetting('backend_config', 'api_version', e.target.value)} 
+                className="w-full px-4 py-2 border rounded-lg" 
+              />
+            </div>
+            <label className="flex items-center">
+              <input 
+                type="checkbox" 
+                checked={backendSettings.cors_enabled} 
+                onChange={(e) => updateSetting('backend_config', 'cors_enabled', e.target.checked)} 
+                className="rounded" 
+              />
+              <span className="ml-2 text-sm">Enable CORS</span>
+            </label>
+          </div>
+        </div>
+
+        {/* Security Settings */}
+        <div className="col-span-2 bg-purple-50 border border-purple-200 rounded-lg p-4">
+          <h4 className="font-semibold text-purple-900 mb-3 flex items-center gap-2">
+            <span>🔒</span> Security & Sessions
+          </h4>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">Session Timeout (minutes)</label>
+              <input 
+                type="number" 
+                value={backendSettings.session_timeout_minutes} 
+                onChange={(e) => updateSetting('backend_config', 'session_timeout_minutes', parseInt(e.target.value))} 
+                className="w-full px-4 py-2 border rounded-lg" 
+                min="5" 
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">JWT Expiry (hours)</label>
+              <input 
+                type="number" 
+                value={backendSettings.jwt_expiry_hours} 
+                onChange={(e) => updateSetting('backend_config', 'jwt_expiry_hours', parseInt(e.target.value))} 
+                className="w-full px-4 py-2 border rounded-lg" 
+                min="1" 
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">Max Upload Size (MB)</label>
+              <input 
+                type="number" 
+                value={backendSettings.max_upload_size_mb} 
+                onChange={(e) => updateSetting('backend_config', 'max_upload_size_mb', parseInt(e.target.value))} 
+                className="w-full px-4 py-2 border rounded-lg" 
+                min="1" 
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Logging Settings */}
+        <div className="col-span-2 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <h4 className="font-semibold text-yellow-900 mb-3 flex items-center gap-2">
+            <span>📝</span> Logging & Monitoring
+          </h4>
+          <div className="grid grid-cols-2 gap-4">
+            <label className="flex items-center">
+              <input 
+                type="checkbox" 
+                checked={backendSettings.enable_logging} 
+                onChange={(e) => updateSetting('backend_config', 'enable_logging', e.target.checked)} 
+                className="rounded" 
+              />
+              <span className="ml-2 text-sm">Enable Logging</span>
+            </label>
+            <div>
+              <label className="block text-sm font-medium mb-2">Log Level</label>
+              <select 
+                value={backendSettings.log_level} 
+                onChange={(e) => updateSetting('backend_config', 'log_level', e.target.value)} 
+                className="w-full px-4 py-2 border rounded-lg"
+              >
+                <option value="debug">Debug</option>
+                <option value="info">Info</option>
+                <option value="warning">Warning</option>
+                <option value="error">Error</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Notifications */}
+        <div className="col-span-2 bg-green-50 border border-green-200 rounded-lg p-4">
+          <h4 className="font-semibold text-green-900 mb-3 flex items-center gap-2">
+            <span>📧</span> Notifications
+          </h4>
+          <div className="grid grid-cols-2 gap-4">
+            <label className="flex items-center">
+              <input 
+                type="checkbox" 
+                checked={backendSettings.enable_email_notifications} 
+                onChange={(e) => updateSetting('backend_config', 'enable_email_notifications', e.target.checked)} 
+                className="rounded" 
+              />
+              <span className="ml-2 text-sm">Enable Email Notifications</span>
+            </label>
+            <label className="flex items-center">
+              <input 
+                type="checkbox" 
+                checked={backendSettings.enable_sms_notifications} 
+                onChange={(e) => updateSetting('backend_config', 'enable_sms_notifications', e.target.checked)} 
+                className="rounded" 
+              />
+              <span className="ml-2 text-sm">Enable SMS Notifications</span>
+            </label>
+          </div>
+        </div>
+
+        {/* Database Backup */}
+        <div className="col-span-2 bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+          <h4 className="font-semibold text-indigo-900 mb-3 flex items-center gap-2">
+            <span>💾</span> Database Backup
+          </h4>
+          <div className="grid grid-cols-2 gap-4">
+            <label className="flex items-center">
+              <input 
+                type="checkbox" 
+                checked={backendSettings.database_backup_enabled} 
+                onChange={(e) => updateSetting('backend_config', 'database_backup_enabled', e.target.checked)} 
+                className="rounded" 
+              />
+              <span className="ml-2 text-sm">Enable Auto Backup</span>
+            </label>
+            <div>
+              <label className="block text-sm font-medium mb-2">Backup Frequency (hours)</label>
+              <input 
+                type="number" 
+                value={backendSettings.backup_frequency_hours} 
+                onChange={(e) => updateSetting('backend_config', 'backup_frequency_hours', parseInt(e.target.value))} 
+                className="w-full px-4 py-2 border rounded-lg" 
+                min="1" 
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Maintenance Mode */}
+        <div className="col-span-2 bg-red-50 border border-red-200 rounded-lg p-4">
+          <h4 className="font-semibold text-red-900 mb-3 flex items-center gap-2">
+            <span>🔧</span> Maintenance Mode
+          </h4>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-700 mb-1">Enable maintenance mode to prevent new bookings and user access</p>
+              <p className="text-xs text-gray-500">Admin users will still have access</p>
+            </div>
+            <label className="flex items-center cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={backendSettings.maintenance_mode} 
+                onChange={(e) => updateSetting('backend_config', 'maintenance_mode', e.target.checked)} 
+                className="rounded border-gray-300 text-red-600" 
+              />
+              <span className="ml-2 text-sm font-semibold">
+                {backendSettings.maintenance_mode ? 'Enabled' : 'Disabled'}
+              </span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+        <p className="text-sm text-gray-600">
+          <strong>⚠️ Note:</strong> Changes to backend configuration may require server restart to take full effect. 
+          Some settings like rate limiting and session timeout will apply immediately.
+        </p>
+      </div>
+    </div>
+  )
+}
 
 const GeneralTab = ({ settings, updateSetting }) => (
   <div className="space-y-6">

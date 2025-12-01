@@ -104,40 +104,42 @@ const TariffManagement = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Tariff Management</h1>
-          <p className="text-gray-600 mt-1">Manage government-regulated maximum tariff rates</p>
+      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl shadow-lg p-6 text-white">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Tariff Management</h1>
+            <p className="text-indigo-100 mt-1">Manage government-regulated maximum tariff rates</p>
+          </div>
+          <button
+            onClick={handleAddRate}
+            className="px-6 py-3 bg-white text-indigo-600 rounded-lg hover:shadow-lg transition-all font-semibold"
+          >
+            + Add Tariff Rate
+          </button>
         </div>
-        <button
-          onClick={handleAddRate}
-          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
-        >
-          + Add Tariff Rate
-        </button>
       </div>
 
       {/* Current Rates */}
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        <div className="px-6 py-4 bg-gray-50 border-b">
-          <h2 className="text-lg font-semibold text-gray-900">Current Tariff Rates</h2>
+      <div className="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg overflow-hidden">
+        <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-gray-100 border-b">
+          <h2 className="text-lg font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">Current Tariff Rates</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50">
+            <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bus Type</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rate per KM</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Minimum Fare</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Effective From</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Effective Until</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Bus Type</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Rate per KM</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Minimum Fare</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Effective From</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Effective Until</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {tariffRates.map((rate) => (
-                <tr key={rate._id} className="hover:bg-gray-50">
+                <tr key={rate._id} className="hover:bg-gradient-to-r hover:from-indigo-50 hover:to-purple-50 transition-all">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className="text-sm font-medium text-gray-900">{rate.bus_type}</span>
                   </td>
@@ -159,24 +161,24 @@ const TariffManagement = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      rate.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                      rate.is_active ? 'bg-gradient-to-r from-green-400 to-emerald-500 text-white' : 'bg-gray-200 text-gray-700'
                     }`}>
                       {rate.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
                     <button
                       onClick={() => handleEditRate(rate)}
-                      className="text-indigo-600 hover:text-indigo-900"
+                      className="text-indigo-600 hover:text-indigo-900 font-semibold"
                     >
-                      Edit
+                      ✏️ Edit
                     </button>
                     {rate.is_active && (
                       <button
                         onClick={() => handleDeleteRate(rate._id)}
-                        className="text-red-600 hover:text-red-900"
+                        className="text-red-600 hover:text-red-900 font-semibold"
                       >
-                        Deactivate
+                        ❌ Deactivate
                       </button>
                     )}
                   </td>

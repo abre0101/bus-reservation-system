@@ -241,6 +241,50 @@ const CustomerDashboard = () => {
           })}
         </div>
 
+        {/* Loyalty Status Banner */}
+        {user?.loyalty_tier && user.loyalty_tier !== 'member' && (
+          <div className={`mb-8 rounded-2xl shadow-2xl p-6 text-white transform hover:scale-[1.02] transition-all duration-300 ${
+            user.loyalty_tier === 'gold' ? 'bg-gradient-to-r from-yellow-400 via-yellow-500 to-orange-500' :
+            user.loyalty_tier === 'silver' ? 'bg-gradient-to-r from-gray-300 via-gray-400 to-gray-500' :
+            user.loyalty_tier === 'bronze' ? 'bg-gradient-to-r from-orange-400 via-amber-500 to-orange-600' :
+            'bg-gradient-to-r from-purple-400 via-purple-500 to-purple-600'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center shadow-lg">
+                  <Star className="h-10 w-10 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold mb-1">
+                    {user.loyalty_tier === 'bronze' && '🥉 Bronze Member'}
+                    {user.loyalty_tier === 'silver' && '🥈 Silver Member'}
+                    {user.loyalty_tier === 'gold' && '🥇 Gold Member'}
+                    {user.loyalty_tier === 'platinum' && '💎 Platinum Member'}
+                  </h3>
+                  <p className="text-white/90">
+                    {user.loyalty_points || 0} points • 
+                    {user.loyalty_tier === 'bronze' && ' 5% discount on all bookings'}
+                    {user.loyalty_tier === 'silver' && ' 10% discount + Priority boarding'}
+                    {user.loyalty_tier === 'gold' && ' 15% discount + VIP benefits'}
+                    {user.loyalty_tier === 'platinum' && ' 20% discount + Premium perks'}
+                  </p>
+                </div>
+              </div>
+              <Link
+                to="/customer/profile"
+                className={`px-6 py-3 bg-white font-bold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 ${
+                  user.loyalty_tier === 'gold' ? 'text-yellow-600 hover:bg-yellow-50' :
+                  user.loyalty_tier === 'silver' ? 'text-gray-600 hover:bg-gray-50' :
+                  user.loyalty_tier === 'bronze' ? 'text-orange-600 hover:bg-orange-50' :
+                  'text-purple-600 hover:bg-purple-50'
+                }`}
+              >
+                View Benefits
+              </Link>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Column - Quick Actions & Upcoming Trips */}
           <div className="lg:col-span-2 space-y-8">
@@ -387,8 +431,70 @@ const CustomerDashboard = () => {
             </div>
           </div>
 
-          {/* Right Column - Recent Bookings */}
-          <div className="lg:col-span-1">
+          {/* Right Column - Loyalty & Recent Bookings */}
+          <div className="lg:col-span-1 space-y-8">
+            {/* Loyalty Status Card */}
+            <div className={`rounded-2xl shadow-2xl p-6 text-white ${
+              userStats.loyaltyTier === 'gold' ? 'bg-gradient-to-br from-yellow-400 via-yellow-500 to-orange-500' :
+              userStats.loyaltyTier === 'silver' ? 'bg-gradient-to-br from-gray-300 via-gray-400 to-gray-500' :
+              userStats.loyaltyTier === 'bronze' ? 'bg-gradient-to-br from-orange-400 via-amber-500 to-orange-600' :
+              'bg-gradient-to-br from-blue-500 via-indigo-600 to-purple-600'
+            }`}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold">Loyalty Status</h3>
+                <Star className="h-8 w-8" />
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm text-white/80">Current Tier</p>
+                  <p className="text-3xl font-bold capitalize">
+                    {userStats.loyaltyTier === 'bronze' && '🥉 Bronze'}
+                    {userStats.loyaltyTier === 'silver' && '🥈 Silver'}
+                    {userStats.loyaltyTier === 'gold' && '🥇 Gold'}
+                    {userStats.loyaltyTier === 'platinum' && '💎 Platinum'}
+                    {(!userStats.loyaltyTier || userStats.loyaltyTier === 'member') && '👤 Member'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-white/80">Total Points</p>
+                  <p className="text-4xl font-bold">{userStats.loyaltyPoints || 0}</p>
+                </div>
+                <div className="pt-3 border-t border-white/30">
+                  <p className="text-xs text-white/80 mb-2">
+                    {userStats.loyaltyTier === 'member' && 'Next Tier: Bronze (500 pts)'}
+                    {userStats.loyaltyTier === 'bronze' && 'Next Tier: Silver (2,000 pts)'}
+                    {userStats.loyaltyTier === 'silver' && 'Next Tier: Gold (5,000 pts)'}
+                    {userStats.loyaltyTier === 'gold' && 'Highest Tier Achieved! 🎉'}
+                  </p>
+                  <div className="w-full bg-white/30 rounded-full h-2">
+                    <div 
+                      className="bg-white h-2 rounded-full transition-all duration-500"
+                      style={{ 
+                        width: `${
+                          userStats.loyaltyTier === 'member' ? Math.min(((userStats.loyaltyPoints || 0) / 500) * 100, 100) :
+                          userStats.loyaltyTier === 'bronze' ? Math.min((((userStats.loyaltyPoints || 0) - 500) / 1500) * 100, 100) :
+                          userStats.loyaltyTier === 'silver' ? Math.min((((userStats.loyaltyPoints || 0) - 2000) / 3000) * 100, 100) :
+                          100
+                        }%` 
+                      }}
+                    ></div>
+                  </div>
+                </div>
+                <Link
+                  to="/customer/profile"
+                  className={`block w-full text-center mt-4 px-4 py-3 bg-white font-bold rounded-xl transition-all duration-200 shadow-lg ${
+                    userStats.loyaltyTier === 'gold' ? 'text-yellow-600 hover:bg-yellow-50' :
+                    userStats.loyaltyTier === 'silver' ? 'text-gray-600 hover:bg-gray-50' :
+                    userStats.loyaltyTier === 'bronze' ? 'text-orange-600 hover:bg-orange-50' :
+                    'text-indigo-600 hover:bg-indigo-50'
+                  }`}
+                >
+                  View Full Benefits
+                </Link>
+              </div>
+            </div>
+
+            {/* Recent Bookings */}
             <div className="bg-white/95 backdrop-blur-lg rounded-2xl shadow-2xl p-8 border border-white/20 sticky top-8">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold text-gray-900 flex items-center">

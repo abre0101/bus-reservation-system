@@ -3,7 +3,7 @@ import { CreditCard, Wallet, ExternalLink } from 'lucide-react'
 import { paymentService } from '../../services/paymentService'
 import { toast } from 'react-toastify'
 
-const PaymentForm = ({ amount, bookingData, onPaymentSuccess }) => {
+const PaymentForm = ({ amount, bookingData, onPaymentSuccess, loyaltyDiscount }) => {
   const [selectedMethod, setSelectedMethod] = useState('')
   const [processing, setProcessing] = useState(false)
 
@@ -76,6 +76,10 @@ const PaymentForm = ({ amount, bookingData, onPaymentSuccess }) => {
         baggage_weight: bookingData?.baggage_weight || 0,
         baggage_fee: bookingData?.baggage_fee || 0,
         passenger_count: bookingData?.passenger_count || 1,
+        // Include loyalty discount information
+        loyalty_discount_percentage: bookingData?.loyalty_discount_percentage || 0,
+        loyalty_discount_amount: bookingData?.loyalty_discount_amount || 0,
+        base_total: bookingData?.base_total || amount,
         // Include additional data that might be needed
         schedule: bookingData?.schedule,
         passengers: bookingData?.passengers,
@@ -83,6 +87,12 @@ const PaymentForm = ({ amount, bookingData, onPaymentSuccess }) => {
       }
 
       console.log('📤 Payment data being sent:', paymentData)
+      console.log('💰 Loyalty discount in payment data:', {
+        discount_amount: paymentData.loyalty_discount_amount,
+        discount_percentage: paymentData.loyalty_discount_percentage,
+        base_total: paymentData.base_total,
+        total_amount: paymentData.total_amount
+      })
 
       let paymentResult;
 
@@ -196,6 +206,21 @@ const PaymentForm = ({ amount, bookingData, onPaymentSuccess }) => {
   // Calculate breakdown amounts with better fallbacks
   const baseFare = bookingData?.base_fare || amount - (bookingData?.baggage_fee || 0)
   const baggageFee = bookingData?.baggage_fee || 0
+  const baseTotal = bookingData?.base_total || (baseFare + baggageFee)
+  const discountAmount = bookingData?.loyalty_discount_amount || 0
+  const discountPercentage = bookingData?.loyalty_discount_percentage || 0
+  
+  // Debug logging
+  console.log('💳 PaymentForm received:', {
+    amount,
+    baseFare,
+    baggageFee,
+    baseTotal,
+    discountAmount,
+    discountPercentage,
+    loyaltyDiscount,
+    bookingData_discount: bookingData?.loyalty_discount_amount
+  })
 
 
   return (
@@ -327,11 +352,34 @@ const PaymentForm = ({ amount, bookingData, onPaymentSuccess }) => {
                 <span className="font-bold text-gray-900">{baggageFee} ETB</span>
               </div>
             )}
+            {discountAmount > 0 && (
+              <>
+                <div className="flex justify-between items-center pt-2 border-t border-gray-300">
+                  <span className="text-gray-600 font-medium">Subtotal:</span>
+                  <span className="font-bold text-gray-900">{baseTotal.toFixed(2)} ETB</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-green-600 font-medium flex items-center gap-2">
+                    <span className="text-xl">🎁</span>
+                    Loyalty Discount ({discountPercentage}% - {loyaltyDiscount?.tier} tier):
+                  </span>
+                  <span className="font-bold text-green-600">-{discountAmount.toFixed(2)} ETB</span>
+                </div>
+              </>
+            )}
             <div className="border-t-2 border-gray-300 pt-3 flex justify-between items-center">
               <span className="text-gray-900 font-bold text-lg">Total Amount:</span>
-              <span className="text-2xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">{amount} ETB</span>
+              <span className="text-2xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">{amount.toFixed(2)} ETB</span>
             </div>
           </div>
+          
+          {discountAmount > 0 && (
+            <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+              <p className="text-sm text-green-700 font-medium text-center">
+                🎉 You're saving {discountAmount.toFixed(2)} ETB with your {loyaltyDiscount?.tier} tier membership!
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Payment Button */}

@@ -109,7 +109,8 @@ def create_app():
             ('tracking_bp', 'tracking', '/tracking'),  # NEW: Bus tracking
             ('settings_bp', 'settings', '/settings'),  # NEW: System settings
             ('tariff_bp', 'tariff', '/tariff'),  # NEW: Tariff management
-            ('emergency_bp', 'emergency_cancel', '/admin')  # NEW: Emergency cancellation
+            ('emergency_bp', 'emergency_cancel', '/admin'),  # NEW: Emergency cancellation
+            ('loyalty_bp', 'loyalty', '/api/loyalty')  # NEW: Loyalty system
         ]
         
         registered_count = 0

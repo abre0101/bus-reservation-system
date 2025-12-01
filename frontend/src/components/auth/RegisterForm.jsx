@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Mail, Lock, User, Phone } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, User, Phone, Calendar } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth.jsx';
 import { toast } from 'react-toastify';
 
@@ -34,7 +34,8 @@ const RegisterForm = () => {
         name: data.name,
         email: data.email,
         password: data.password,
-        phone: data.phone
+        phone: data.phone,
+        birthday: data.birthday
       };
       
       console.log('📤 Customer data being sent to backend:', userData);
@@ -77,11 +78,22 @@ const RegisterForm = () => {
           <p className="text-gray-600 mt-2">Join EthioBus as a customer</p>
           
           {/* Information Box */}
-          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-sm text-blue-700">
-              <strong>Note:</strong> Only customer accounts can be created here. 
-              Driver, ticketer, operator, and admin accounts require administrative approval.
-            </p>
+          <div className="mt-4 space-y-3">
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-700">
+                <strong>Note:</strong> Only customer accounts can be created here. 
+                Driver, ticketer, operator, and admin accounts require administrative approval.
+              </p>
+            </div>
+            <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg">
+              <p className="text-sm text-purple-700 flex items-center gap-2">
+                <span className="text-lg">🎁</span>
+                <span>
+                  <strong>Loyalty Rewards:</strong> Join our loyalty program and earn points with every booking! 
+                  Add your birthday to receive special bonus points on your special day.
+                </span>
+              </p>
+            </div>
           </div>
         </div>
 
@@ -179,6 +191,48 @@ const RegisterForm = () => {
                 {errors.phone.message}
               </p>
             )}
+          </div>
+
+          {/* Date of Birth */}
+          <div>
+            <label htmlFor="birthday" className="block text-sm font-medium text-gray-700 mb-2">
+              Date of Birth <span className="text-gray-500 text-xs">(Optional - for birthday rewards)</span>
+            </label>
+            <div className="relative">
+              <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+              <input
+                id="birthday"
+                type="date"
+                max={new Date(new Date().setFullYear(new Date().getFullYear() - 13)).toISOString().split('T')[0]}
+                className={`w-full px-3 py-3 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
+                  errors.birthday ? 'border-red-500 bg-red-50' : 'hover:border-gray-400'
+                }`}
+                {...register('birthday', {
+                  validate: value => {
+                    if (!value) return true; // Optional field
+                    const birthDate = new Date(value);
+                    const today = new Date();
+                    const age = today.getFullYear() - birthDate.getFullYear();
+                    const monthDiff = today.getMonth() - birthDate.getMonth();
+                    
+                    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                      return age - 1 >= 13 || 'You must be at least 13 years old';
+                    }
+                    return age >= 13 || 'You must be at least 13 years old';
+                  },
+                  onChange: () => clearErrors('birthday')
+                })}
+              />
+            </div>
+            {errors.birthday && (
+              <p className="mt-1 text-sm text-red-600 flex items-center">
+                <span className="w-1.5 h-1.5 bg-red-500 rounded-full mr-2"></span>
+                {errors.birthday.message}
+              </p>
+            )}
+            <p className="mt-1 text-xs text-gray-500">
+              🎁 Add your birthday to receive special loyalty bonus points!
+            </p>
           </div>
 
           {/* Password */}

@@ -651,63 +651,136 @@ const Schedules = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6 bg-gray-50 min-h-screen">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Schedule Management</h1>
+          <p className="text-gray-600 mt-1">Manage bus schedules, routes, and departures</p>
+        </div>
+        <button
+          onClick={handleAddSchedule}
+          className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl font-semibold"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Add New Schedule
+        </button>
+      </div>
+
       {/* Stats Section */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
-          <p className="text-gray-600 text-sm font-medium">Total</p>
-          <p className="text-3xl font-bold text-gray-900">{stats.total}</p>
+        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-blue-100 text-sm font-medium uppercase tracking-wide">Total</p>
+              <p className="text-4xl font-bold mt-2">{stats.total}</p>
+            </div>
+            <div className="bg-blue-400 bg-opacity-30 rounded-xl p-3">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+          </div>
         </div>
-        <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-yellow-500">
-          <p className="text-gray-600 text-sm font-medium">Scheduled</p>
-          <p className="text-3xl font-bold text-yellow-600">{stats.scheduled}</p>
+        <div className="bg-gradient-to-br from-yellow-500 to-orange-500 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-yellow-100 text-sm font-medium uppercase tracking-wide">Scheduled</p>
+              <p className="text-4xl font-bold mt-2">{stats.scheduled}</p>
+            </div>
+            <div className="bg-yellow-400 bg-opacity-30 rounded-xl p-3">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+          </div>
         </div>
-        <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-500">
-          <p className="text-gray-600 text-sm font-medium">Departed</p>
-          <p className="text-3xl font-bold text-purple-600">{stats.departed}</p>
+        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-purple-100 text-sm font-medium uppercase tracking-wide">Departed</p>
+              <p className="text-4xl font-bold mt-2">{stats.departed}</p>
+            </div>
+            <div className="bg-purple-400 bg-opacity-30 rounded-xl p-3">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </div>
+          </div>
         </div>
-        <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
-          <p className="text-gray-600 text-sm font-medium">In Progress</p>
-          <p className="text-3xl font-bold text-green-600">{stats.inProgress}</p>
+        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-green-100 text-sm font-medium uppercase tracking-wide">In Progress</p>
+              <p className="text-4xl font-bold mt-2">{stats.inProgress}</p>
+            </div>
+            <div className="bg-green-400 bg-opacity-30 rounded-xl p-3">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+          </div>
         </div>
-        <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-gray-500">
-          <p className="text-gray-600 text-sm font-medium">Completed</p>
-          <p className="text-3xl font-bold text-gray-600">{stats.completed}</p>
+        <div className="bg-gradient-to-br from-gray-500 to-gray-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-gray-100 text-sm font-medium uppercase tracking-wide">Completed</p>
+              <p className="text-4xl font-bold mt-2">{stats.completed}</p>
+            </div>
+            <div className="bg-gray-400 bg-opacity-30 rounded-xl p-3">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+          </div>
         </div>
-        <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-red-500">
-          <p className="text-gray-600 text-sm font-medium">Cancelled</p>
-          <p className="text-3xl font-bold text-red-600">{stats.cancelled}</p>
+        <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-red-100 text-sm font-medium uppercase tracking-wide">Cancelled</p>
+              <p className="text-4xl font-bold mt-2">{stats.cancelled}</p>
+            </div>
+            <div className="bg-red-400 bg-opacity-30 rounded-xl p-3">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Filters Section */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Filters</h2>
-          <button
-            onClick={handleAddSchedule}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
-          >
-            + Add Schedule
-          </button>
+      <div className="bg-white rounded-2xl shadow-lg p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+          </svg>
+          <h2 className="text-xl font-bold text-gray-900">Filters</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
-            <input
-              type="text"
-              placeholder="Search by cities or bus number..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-            />
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Search Schedules</label>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search by cities or bus number..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+              />
+              <svg className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Status Filter</label>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
             >
               <option value="all">All Status</option>
               <option value="scheduled">Scheduled</option>
@@ -720,11 +793,11 @@ const Schedules = () => {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Date Filter</label>
             <select
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
             >
               <option value="all">All Dates</option>
               <option value="today">Today</option>
@@ -736,28 +809,40 @@ const Schedules = () => {
       </div>
 
       {/* Schedules Table */}
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50">
+            <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Route</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bus</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Driver</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Seats</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fare</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Route</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Date</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Time</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Bus</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Driver</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Seats</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Fare</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredSchedules.map((schedule) => {
                 const totalSeats = schedule.total_seats || 45
                 const bookedSeats = schedule.booked_seats || 0
-                const availableSeats = schedule.available_seats || (totalSeats - bookedSeats)
+                const availableSeats = totalSeats - bookedSeats
                 const occupancy = totalSeats > 0 ? ((bookedSeats / totalSeats) * 100).toFixed(0) : 0
+                
+                // Debug logging
+                if (schedule._id && bookedSeats > 0) {
+                  console.log('Schedule seats:', {
+                    id: schedule._id,
+                    route: `${schedule.origin_city} → ${schedule.destination_city}`,
+                    total: totalSeats,
+                    booked: bookedSeats,
+                    available: availableSeats,
+                    from_api: schedule.available_seats
+                  })
+                }
 
                 const originCity = schedule.origin_city || 'N/A'
                 const destinationCity = schedule.destination_city || 'N/A'
@@ -881,12 +966,12 @@ const Schedules = () => {
       {/* Emergency Cancel Modal */}
       {showCancelModal && scheduleToCancel && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-lg w-full p-6">
+          <div className="bg-white rounded-lg max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-red-600">🚨 Emergency Cancellation</h2>
               <button
                 onClick={() => setShowCancelModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 text-2xl"
               >
                 ✕
               </button>
@@ -907,7 +992,7 @@ const Schedules = () => {
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                 <h3 className="font-semibold text-yellow-900 mb-2">⚠️ Important</h3>
                 <ul className="text-sm text-yellow-800 space-y-1">
-                  <li>• All passengers will receive <strong>100% refund</strong></li>
+                  <li>• All passengers will receive refund based on percentage below</li>
                   <li>• Passengers will be notified via email/SMS</li>
                   <li>• This action cannot be undone</li>
                   <li>• Schedule status will be set to "cancelled"</li>
@@ -940,9 +1025,75 @@ const Schedules = () => {
                     placeholder="Additional details (optional)..."
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
                     rows="3"
-                    onChange={(e) => setCancelReason(cancelReason.split(':')[0] + ': ' + e.target.value)}
+                    onChange={(e) => {
+                      const baseReason = cancelReason.split(':')[0]
+                      const details = e.target.value.trim()
+                      setCancelReason(details ? `${baseReason}: ${details}` : baseReason)
+                    }}
                   />
                 )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Refund Percentage * <span className="text-red-600">(0-100%)</span>
+                </label>
+                <div className="flex items-center gap-4">
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    value={refundPercentage}
+                    onChange={(e) => setRefundPercentage(parseInt(e.target.value))}
+                    className="flex-1"
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={refundPercentage}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value) || 0
+                      setRefundPercentage(Math.min(100, Math.max(0, value)))
+                    }}
+                    className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+                  />
+                  <span className="text-sm font-semibold text-gray-700">%</span>
+                </div>
+                <div className="mt-2 flex justify-between text-xs text-gray-600">
+                  <button
+                    type="button"
+                    onClick={() => setRefundPercentage(0)}
+                    className="px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
+                  >
+                    No Refund
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRefundPercentage(50)}
+                    className="px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
+                  >
+                    50%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRefundPercentage(75)}
+                    className="px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
+                  >
+                    75%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRefundPercentage(100)}
+                    className="px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
+                  >
+                    Full Refund
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Estimated total refund: {((scheduleToCancel.booked_seats || 0) * (scheduleToCancel.fare_birr || 0) * refundPercentage / 100).toFixed(2)} ETB
+                </p>
               </div>
             </div>
 
@@ -957,7 +1108,7 @@ const Schedules = () => {
                 onClick={handleConfirmEmergencyCancel}
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold"
               >
-                Confirm Cancellation & Refund 100%
+                Confirm Cancellation & Refund {refundPercentage}%
               </button>
             </div>
           </div>
@@ -966,7 +1117,7 @@ const Schedules = () => {
 
       {/* Add/Edit Schedule Modal */}
       {(showAddModal || showEditModal) && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-40">
           <div className="bg-white rounded-lg max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-gray-900">

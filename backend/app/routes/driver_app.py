@@ -1283,9 +1283,11 @@ def get_driver_profile():
         
         profile = {
             '_id': str(driver['_id']),
-            'full_name': driver.get('full_name'),
+            'full_name': driver.get('full_name') or driver.get('name'),
+            'name': driver.get('name') or driver.get('full_name'),
             'email': driver.get('email'),
-            'phone': driver.get('phone'),
+            'phone': driver.get('phone') or driver.get('phone_number'),
+            'phone_number': driver.get('phone_number') or driver.get('phone'),
             'license_number': driver.get('license_number'),
             'license_expiry': driver.get('license_expiry'),
             'experience_years': driver.get('experience_years', 0),
@@ -1294,10 +1296,13 @@ def get_driver_profile():
             'emergency_contact': driver.get('emergency_contact'),
             'profile_picture': driver.get('profile_picture'),
             'documents': driver.get('documents', []),
-            'created_at': driver.get('created_at')
+            'role': driver.get('role'),
+            'is_active': driver.get('is_active'),
+            'created_at': driver.get('created_at'),
+            'updated_at': driver.get('updated_at')
         }
         
-        return jsonify(profile), 200
+        return jsonify({'driver': profile}), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1314,8 +1319,25 @@ def update_driver_profile():
         data = request.get_json()
         
         # Fields that can be updated
-        allowed_fields = ['phone', 'address', 'emergency_contact', 'profile_picture']
-        update_data = {k: v for k, v in data.items() if k in allowed_fields}
+        allowed_fields = [
+            'full_name', 'name', 'email', 'phone', 'phone_number',
+            'address', 'emergency_contact', 'profile_picture',
+            'license_number', 'license_expiry'
+        ]
+        update_data = {}
+        
+        for key, value in data.items():
+            if key in allowed_fields:
+                # Map phone_number to phone for consistency
+                if key == 'phone_number':
+                    update_data['phone'] = value
+                    update_data['phone_number'] = value
+                # Map name to full_name for consistency
+                elif key == 'full_name':
+                    update_data['full_name'] = value
+                    update_data['name'] = value
+                else:
+                    update_data[key] = value
         
         if not update_data:
             return jsonify({'error': 'No valid fields to update'}), 400
@@ -1327,7 +1349,13 @@ def update_driver_profile():
             {'$set': update_data}
         )
         
-        return jsonify({'message': 'Profile updated successfully'}), 200
+        # Get updated driver data
+        updated_driver = mongo.db.users.find_one({'_id': driver['_id']})
+        
+        return jsonify({
+            'message': 'Profile updated successfully',
+            'user': serialize_doc(updated_driver)
+        }), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500

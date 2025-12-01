@@ -572,5 +572,30 @@ export const adminService = {
       console.error('❌ Error getting tariff history:', error)
       throw this.handleError(error)
     }
+  },
+
+  // ==================== CUSTOMER MANAGEMENT ====================
+  async getCustomers() {
+    try {
+      console.log('🔄 Fetching customers...')
+      const response = await api.get('/admin/customers')
+      console.log('✅ Customers response:', response.data)
+      return response.data
+    } catch (error) {
+      console.error('❌ Error getting customers:', error)
+      throw this.handleError(error)
+    }
+  },
+
+  async getCustomerBookings(customerId) {
+    try {
+      console.log(`🔄 Fetching bookings for customer ${customerId}...`)
+      const response = await api.get(`/admin/customer/${customerId}/bookings`)
+      console.log('✅ Customer bookings response:', response.data)
+      return response.data
+    } catch (error) {
+      console.error(`❌ Error getting customer ${customerId} bookings:`, error)
+      throw this.handleError(error)
+    }
   }
 }
