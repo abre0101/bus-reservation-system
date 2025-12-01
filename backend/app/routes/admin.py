@@ -1162,30 +1162,19 @@ def get_customers():
             # Find all matching bookings directly
             all_bookings = list(mongo.db.bookings.find(match_query))
             
-            # Calculate stats from the found bookings
-            total_bookings = len(all_bookings)
-            last_booking = max([b.get('created_at') or b.get('booked_at') for b in all_bookings], default=None) if all_bookings else None
+            # Use stored values from user document (source of truth)
+            # These are updated in real-time when bookings are created/completed
+            loyalty_points = customer.get('loyalty_points', 0)
+            total_bookings = customer.get('total_bookings', 0)
+            completed_trips = customer.get('completed_trips', 0)
+            
+            # Calculate total_spent from bookings (excluding cancelled bookings)
             total_spent = sum([b.get('total_amount', 0) for b in all_bookings if b.get('status') != 'cancelled'])
             
-            # Calculate completed trips (past travel dates with confirmed/completed status)
-            from datetime import datetime
-            current_time = datetime.utcnow()
-            completed_trips = 0
-            for booking in all_bookings:
-                if booking.get('status') in ['confirmed', 'completed', 'checked_in']:
-                    travel_date = booking.get('travel_date') or booking.get('departure_date')
-                    if travel_date:
-                        try:
-                            if isinstance(travel_date, str):
-                                travel_date = datetime.fromisoformat(travel_date.replace('Z', '+00:00'))
-                            if travel_date < current_time:
-                                completed_trips += 1
-                        except:
-                            pass
+            # Get last booking date from bookings
+            last_booking = max([b.get('created_at') or b.get('booked_at') for b in all_bookings], default=None) if all_bookings else None
             
-            # Loyalty points calculation: (total_bookings * 100) + (completed_trips * 50)
-            loyalty_points = (total_bookings * 100) + (completed_trips * 50)
-            
+            # Update customer_data with stored values
             customer_data['booking_count'] = total_bookings
             customer_data['completed_trips'] = completed_trips
             customer_data['loyalty_points'] = loyalty_points
