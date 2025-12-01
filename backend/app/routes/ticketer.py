@@ -161,18 +161,34 @@ def get_schedules():
             schedule_data = serialize_doc(schedule)
             
             # Calculate actual booked seats from bookings
-            # Try both string and ObjectId formats for schedule_id
+            # The schedule_id in bookings is stored as ObjectId, so we need to use the ObjectId directly
+            from bson import ObjectId
+            
             schedule_id_str = str(schedule['_id'])
+            
+            print(f"  🔍 Checking bookings for schedule: {schedule_id_str}")
+            
+            # Try with string format first
             booked_seats_count = mongo.db.bookings.count_documents({
-                '$or': [
-                    {'schedule_id': schedule_id_str},
-                    {'schedule_id': schedule['_id']}
-                ],
-                'status': {'$in': ['confirmed', 'checked_in', 'pending']},
-                'payment_status': 'paid'
+                'schedule_id': schedule_id_str,
+                'status': {'$nin': ['cancelled', 'refunded']}
             })
             
-            print(f"  📊 Schedule {schedule_id_str}: {booked_seats_count} booked seats")
+            print(f"     String format: {booked_seats_count} bookings")
+            
+            # If no bookings found with string, try ObjectId format
+            if booked_seats_count == 0:
+                try:
+                    schedule_id_obj = ObjectId(schedule_id_str)
+                    booked_seats_count = mongo.db.bookings.count_documents({
+                        'schedule_id': schedule_id_obj,
+                        'status': {'$nin': ['cancelled', 'refunded']}
+                    })
+                    print(f"     ObjectId format: {booked_seats_count} bookings")
+                except Exception as e:
+                    print(f"     Error trying ObjectId: {e}")
+            
+            print(f"  ✅ Total booked seats: {booked_seats_count}")
             
             # Get route information
             route = None
@@ -237,11 +253,29 @@ def get_schedules():
 @ticketer_bp.route('/schedules/<string:schedule_id>/occupied-seats', methods=['GET'])
 def get_occupied_seats(schedule_id):
     try:
-        # Get all bookings for this schedule
+        print(f"🔍 Looking for bookings with schedule_id: {schedule_id}")
+        
+        # Try both string and ObjectId formats
+        from bson import ObjectId
+        
+        # First try as string (most common)
         bookings = list(mongo.db.bookings.find({
             'schedule_id': schedule_id,
-            'status': {'$in': ['confirmed', 'checked_in']}
+            'status': {'$nin': ['cancelled', 'refunded']}
         }))
+        
+        print(f"📊 Found {len(bookings)} bookings using string format")
+        
+        # If no bookings found, try with ObjectId
+        if len(bookings) == 0:
+            try:
+                bookings = list(mongo.db.bookings.find({
+                    'schedule_id': ObjectId(schedule_id),
+                    'status': {'$nin': ['cancelled', 'refunded']}
+                }))
+                print(f"📊 Found {len(bookings)} bookings using ObjectId format")
+            except Exception as e:
+                print(f"⚠️ Could not try ObjectId format: {e}")
         
         # Extract all seat numbers from bookings
         occupied_seats = []
@@ -251,12 +285,17 @@ def get_occupied_seats(schedule_id):
             elif 'seat_number' in booking:
                 occupied_seats.append(booking['seat_number'])
         
+        print(f"🪑 Occupied seats: {occupied_seats}")
+        
         return jsonify({
             'success': True,
             'occupiedSeats': occupied_seats
         }), 200
         
     except Exception as e:
+        print(f"❌ Error getting occupied seats: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # ==================== ROUTE MANAGEMENT ====================
