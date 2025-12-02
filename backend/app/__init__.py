@@ -170,6 +170,13 @@ def create_app():
     # APPLICATION ROUTES
     # =========================================================================
     
+    @app.route('/uploads/<path:filename>')
+    def serve_upload(filename):
+        """Serve uploaded files"""
+        from flask import send_from_directory
+        upload_dir = os.path.join(os.getcwd(), 'uploads')
+        return send_from_directory(upload_dir, filename)
+    
     @app.route('/')
     def health_check():
         """Comprehensive health check endpoint"""

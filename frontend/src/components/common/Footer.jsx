@@ -97,7 +97,7 @@ const Footer = () => {
               <div className="flex items-center space-x-2">
                 <Phone className="h-4 w-4 text-blue-400" />
                 <a href="tel:+251911223344" className="text-gray-300 text-sm hover:text-white">
-                  +251 911 223 344
+                  +251 900469816
                 </a>
               </div>
               <div className="flex items-center space-x-2">
@@ -127,11 +127,15 @@ const Footer = () => {
         </div>
 
         {/* Animated Bus */}
-        <div className="relative py-6 overflow-hidden">
-          <div className="animate-bus-drive">
-            <div className="flex items-center space-x-2 text-blue-400">
-              <Bus className="h-8 w-8" />
-              <span className="text-sm font-semibold whitespace-nowrap">EthioBus on the move...</span>
+        <div className="relative py-8 overflow-hidden">
+          <div className="animate-bus-drive relative">
+            <div className="flex items-center space-x-3 text-blue-400">
+              <div className="relative">
+                <Bus className="h-16 w-16" />
+                {/* Door opening indicator */}
+                <div className="absolute top-1/2 right-0 h-12 bg-yellow-300 animate-door-open rounded-r"></div>
+              </div>
+              <span className="text-lg font-semibold whitespace-nowrap">EthioBus</span>
             </div>
           </div>
         </div>

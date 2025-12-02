@@ -5,6 +5,7 @@ from bson import ObjectId
 from bson.errors import InvalidId
 from datetime import datetime, timedelta
 from flask import Blueprint, jsonify, request, make_response
+from app.utils.document_processor import extract_license_info, get_file_info
 
 admin_bp = Blueprint('admin_bp', __name__)
 
@@ -730,9 +731,55 @@ def create_entity(entity):
         return jsonify({'error': 'Admin access required'}), 403
     
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
+        # Handle file uploads for drivers
+        if entity == 'driver' and request.content_type and 'multipart/form-data' in request.content_type:
+            data = {}
+            # Get form fields
+            for key in request.form:
+                data[key] = request.form[key]
+            
+            # Handle file uploads
+            import os
+            from werkzeug.utils import secure_filename
+            
+            upload_folder = 'uploads/driver_documents'
+            os.makedirs(upload_folder, exist_ok=True)
+            
+            # Process each document type
+            for doc_type in ['license_document', 'id_document', 'medical_certificate']:
+                if doc_type in request.files:
+                    file = request.files[doc_type]
+                    if file and file.filename:
+                        # Create unique filename
+                        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+                        filename = secure_filename(f"{timestamp}_{doc_type}_{file.filename}")
+                        filepath = os.path.join(upload_folder, filename)
+                        
+                        # Save file
+                        file.save(filepath)
+                        data[f'{doc_type}_url'] = f'/{filepath}'
+                        print(f"✅ Saved {doc_type}: {filepath}")
+                        
+                        # Try to extract license info from license document
+                        if doc_type == 'license_document':
+                            extracted_info = extract_license_info(filepath)
+                            if extracted_info:
+                                # Only auto-fill if not manually provided
+                                if not data.get('license_number') and extracted_info.get('license_number'):
+                                    data['license_number'] = extracted_info['license_number']
+                                    print(f"✅ Extracted license number: {extracted_info['license_number']}")
+                                if not data.get('license_expiry') and extracted_info.get('expiry_date'):
+                                    data['license_expiry'] = extracted_info['expiry_date']
+                                    print(f"✅ Extracted expiry date: {extracted_info['expiry_date']}")
+                        
+                        # Store file info
+                        file_info = get_file_info(filepath)
+                        if file_info:
+                            data[f'{doc_type}_info'] = file_info
+        else:
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': 'No data provided'}), 400
         
         collection_name = get_collection(entity)
         
@@ -780,6 +827,11 @@ def create_entity(entity):
         # Special handling for drivers
         if entity == 'driver':
             data['role'] = 'driver'
+            # Hash password if provided
+            if 'password' in data and data['password']:
+                from app import bcrypt
+                data['password'] = bcrypt.generate_password_hash(data['password']).decode('utf-8')
+                print(f"✅ Password hashed for new driver")
         
         result = mongo.db[collection_name].insert_one(data)
         created_item = mongo.db[collection_name].find_one({'_id': result.inserted_id})
@@ -799,9 +851,55 @@ def update_entity(entity, item_id):
         return jsonify({'error': 'Admin access required'}), 403
     
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
+        # Handle file uploads for drivers
+        if entity == 'driver' and request.content_type and 'multipart/form-data' in request.content_type:
+            data = {}
+            # Get form fields
+            for key in request.form:
+                data[key] = request.form[key]
+            
+            # Handle file uploads
+            import os
+            from werkzeug.utils import secure_filename
+            
+            upload_folder = 'uploads/driver_documents'
+            os.makedirs(upload_folder, exist_ok=True)
+            
+            # Process each document type
+            for doc_type in ['license_document', 'id_document', 'medical_certificate']:
+                if doc_type in request.files:
+                    file = request.files[doc_type]
+                    if file and file.filename:
+                        # Create unique filename
+                        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+                        filename = secure_filename(f"{timestamp}_{doc_type}_{file.filename}")
+                        filepath = os.path.join(upload_folder, filename)
+                        
+                        # Save file
+                        file.save(filepath)
+                        data[f'{doc_type}_url'] = f'/{filepath}'
+                        print(f"✅ Updated {doc_type}: {filepath}")
+                        
+                        # Try to extract license info from license document
+                        if doc_type == 'license_document':
+                            extracted_info = extract_license_info(filepath)
+                            if extracted_info:
+                                # Only auto-fill if not manually provided
+                                if not data.get('license_number') and extracted_info.get('license_number'):
+                                    data['license_number'] = extracted_info['license_number']
+                                    print(f"✅ Extracted license number: {extracted_info['license_number']}")
+                                if not data.get('license_expiry') and extracted_info.get('expiry_date'):
+                                    data['license_expiry'] = extracted_info['expiry_date']
+                                    print(f"✅ Extracted expiry date: {extracted_info['expiry_date']}")
+                        
+                        # Store file info
+                        file_info = get_file_info(filepath)
+                        if file_info:
+                            data[f'{doc_type}_info'] = file_info
+        else:
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': 'No data provided'}), 400
         
         collection_name = get_collection(entity)
         
@@ -832,6 +930,16 @@ def update_entity(entity, item_id):
                         }), 409
         
         data['updated_at'] = datetime.utcnow()
+        
+        # Special handling for drivers - hash password if provided
+        if entity == 'driver':
+            if 'password' in data and data['password']:
+                from app import bcrypt
+                data['password'] = bcrypt.generate_password_hash(data['password']).decode('utf-8')
+                print(f"✅ Password hashed for driver update")
+            else:
+                # Remove password field if empty (don't update it)
+                data.pop('password', None)
         
         item_id_obj = safe_object_id(item_id)
         result = mongo.db[collection_name].update_one(

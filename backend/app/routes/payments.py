@@ -690,10 +690,69 @@ def create_telebirr_payment():
         print(f"📦 Booking data: {data}")
         
         # Required fields validation
-        required_fields = ['schedule_id', 'passenger_name', 'passenger_phone', 'seat_numbers', 'base_fare']
+        required_fields = ['schedule_id', 'seat_numbers', 'base_fare']
         for field in required_fields:
             if field not in data or not data[field]:
                 return jsonify({'error': f'Missing required field: {field}'}), 400
+        
+        # Parse passengers data
+        passengers_data = data.get('passengers', {})
+        passenger_name = data.get('passenger_name')
+        passenger_phone = data.get('passenger_phone')
+        requested_seats = data['seat_numbers']
+        
+        print(f"🔍 DEBUG - Passengers data: {passengers_data}")
+        
+        # Build passengers list
+        passengers_list = []
+        
+        if isinstance(passengers_data, dict) and any(key.startswith('passenger_') for key in passengers_data.keys()):
+            # Multiple passengers format
+            passenger_indices = set()
+            for key in passengers_data.keys():
+                if key.startswith('passenger_') and '_' in key:
+                    parts = key.split('_')
+                    if len(parts) >= 2 and parts[1].isdigit():
+                        passenger_indices.add(int(parts[1]))
+            
+            for idx in sorted(passenger_indices):
+                name = passengers_data.get(f'passenger_{idx}_name', '').strip()
+                phone = passengers_data.get(f'passenger_{idx}_phone', '').strip()
+                email = passengers_data.get(f'passenger_{idx}_email', '').strip()
+                seat = passengers_data.get(f'passenger_{idx}_seat', '')
+                
+                if not seat and idx < len(requested_seats):
+                    seat = requested_seats[idx]
+                
+                if name and phone:
+                    passengers_list.append({
+                        'name': name,
+                        'phone': phone,
+                        'email': email,
+                        'seat_number': seat
+                    })
+        
+        # Fallback to single passenger
+        if not passengers_list and passenger_name and passenger_phone:
+            passengers_list.append({
+                'name': passenger_name,
+                'phone': passenger_phone,
+                'email': data.get('passenger_email', ''),
+                'seat_number': requested_seats[0] if requested_seats else ''
+            })
+        
+        if not passengers_list:
+            return jsonify({'error': 'At least one passenger with name and phone is required'}), 400
+        
+        print(f"✅ Parsed {len(passengers_list)} passengers:")
+        for i, p in enumerate(passengers_list):
+            print(f"  Passenger {i+1}: {p['name']} ({p['phone']}) - Seat {p['seat_number']}")
+        
+        # Use first passenger as primary contact
+        primary_passenger = passengers_list[0]
+        passenger_name = primary_passenger['name']
+        passenger_phone = primary_passenger['phone']
+        passenger_email = primary_passenger.get('email', '')
         
         schedule_id = data['schedule_id']
         
@@ -743,9 +802,10 @@ def create_telebirr_payment():
             'user_id': ObjectId(user_id),
             'schedule_id': ObjectId(schedule_id),
             'seat_numbers': data['seat_numbers'],
-            'passenger_name': data['passenger_name'],
-            'passenger_phone': data['passenger_phone'],
-            'passenger_email': data.get('passenger_email', ''),
+            'passenger_name': passenger_name,  # Primary passenger
+            'passenger_phone': passenger_phone,  # Primary passenger
+            'passenger_email': passenger_email,  # Primary passenger
+            'passengers': passengers_list,  # All passengers with details
             
             # Baggage Information
             'has_baggage': has_baggage,

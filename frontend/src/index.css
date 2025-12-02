@@ -1253,6 +1253,13 @@ a:hover {
   0% {
     transform: translateX(-100%);
   }
+  35% {
+    transform: translateX(calc(50vw - 60px));
+  }
+  /* Stop at center for people to exit */
+  40%, 60% {
+    transform: translateX(calc(50vw - 60px));
+  }
   100% {
     transform: translateX(calc(100vw + 200px));
   }
@@ -1277,7 +1284,7 @@ a:hover {
 }
 
 .animate-bus-drive {
-  animation: bus-drive 15s linear infinite;
+  animation: bus-drive 20s ease-in-out infinite;
   display: inline-block;
 }
 

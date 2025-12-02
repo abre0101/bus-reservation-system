@@ -37,11 +37,16 @@
   0% { 
     transform: translateX(-200px) translateY(0px); 
   }
-  48% { 
+  35% { 
     transform: translateX(calc(50vw - 60px)) translateY(0px); 
   }
-  52% { 
-    transform: translateX(calc(50vw - 60px)) translateY(-5px); 
+  /* Stop at center */
+  40%, 60% { 
+    transform: translateX(calc(50vw - 60px)) translateY(0px); 
+  }
+  /* Continue moving */
+  65% { 
+    transform: translateX(calc(50vw - 60px)) translateY(-3px); 
   }
   100% { 
     transform: translateX(calc(100vw + 200px)) translateY(0px); 
@@ -120,8 +125,62 @@
   animation: road-scroll 4s linear infinite;
 }
 
+@keyframes people-exit {
+  0%, 35% {
+    opacity: 0;
+    transform: translateX(0) translateY(0) scale(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateX(0) translateY(0) scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: translateX(30px) translateY(-10px) scale(1);
+  }
+  60% {
+    opacity: 0;
+    transform: translateX(60px) translateY(0) scale(0.8);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(60px) translateY(0) scale(0);
+  }
+}
+
+@keyframes door-open {
+  0%, 38% {
+    width: 0;
+    opacity: 0;
+  }
+  40% {
+    width: 8px;
+    opacity: 1;
+  }
+  60% {
+    width: 8px;
+    opacity: 1;
+  }
+  62% {
+    width: 0;
+    opacity: 0;
+  }
+  100% {
+    width: 0;
+    opacity: 0;
+  }
+}
+
 .animate-bus-drive {
-  animation: bus-drive 25s linear infinite;
+  animation: bus-drive 25s ease-in-out infinite;
+}
+
+.animate-people-exit {
+  animation: people-exit 25s ease-in-out infinite;
+}
+
+.animate-door-open {
+  animation: door-open 25s ease-in-out infinite;
 }
 
 .animate-bus-drive-slow {

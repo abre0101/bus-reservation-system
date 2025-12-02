@@ -402,10 +402,75 @@ def create_booking():
         print(f"🎫 Creating booking for user: {current_user_id}")
         
         # Validate required fields
-        required_fields = ['schedule_id', 'passenger_name', 'passenger_phone', 'seat_numbers', 'base_fare']
+        required_fields = ['schedule_id', 'seat_numbers', 'base_fare']
         for field in required_fields:
             if not data.get(field):
                 return jsonify({'error': f'{field} is required'}), 400
+        
+        # Validate passengers data - can be either single passenger or array
+        passengers_data = data.get('passengers', {})
+        passenger_name = data.get('passenger_name')
+        passenger_phone = data.get('passenger_phone')
+        
+        print(f"🔍 DEBUG - Received data:")
+        print(f"  - passengers_data type: {type(passengers_data)}")
+        print(f"  - passengers_data: {passengers_data}")
+        print(f"  - passenger_name: {passenger_name}")
+        print(f"  - passenger_phone: {passenger_phone}")
+        print(f"  - seat_numbers: {data.get('seat_numbers')}")
+        
+        # Build passengers list
+        passengers_list = []
+        requested_seats = data['seat_numbers']
+        
+        if isinstance(passengers_data, dict) and any(key.startswith('passenger_') for key in passengers_data.keys()):
+            # Multiple passengers format: {passenger_0_name, passenger_0_phone, ...}
+            passenger_indices = set()
+            for key in passengers_data.keys():
+                if key.startswith('passenger_') and '_' in key:
+                    parts = key.split('_')
+                    if len(parts) >= 2 and parts[1].isdigit():
+                        passenger_indices.add(int(parts[1]))
+            
+            for idx in sorted(passenger_indices):
+                name = passengers_data.get(f'passenger_{idx}_name', '').strip()
+                phone = passengers_data.get(f'passenger_{idx}_phone', '').strip()
+                email = passengers_data.get(f'passenger_{idx}_email', '').strip()
+                seat = passengers_data.get(f'passenger_{idx}_seat', '')
+                
+                # If no seat specified, use from seat_numbers array
+                if not seat and idx < len(requested_seats):
+                    seat = requested_seats[idx]
+                
+                if name and phone:
+                    passengers_list.append({
+                        'name': name,
+                        'phone': phone,
+                        'email': email,
+                        'seat_number': seat
+                    })
+        
+        # Fallback to single passenger if no passengers list
+        if not passengers_list and passenger_name and passenger_phone:
+            passengers_list.append({
+                'name': passenger_name,
+                'phone': passenger_phone,
+                'email': data.get('passenger_email', ''),
+                'seat_number': data['seat_numbers'][0] if data['seat_numbers'] else ''
+            })
+        
+        if not passengers_list:
+            return jsonify({'error': 'At least one passenger with name and phone is required'}), 400
+        
+        print(f"✅ Parsed {len(passengers_list)} passengers:")
+        for i, p in enumerate(passengers_list):
+            print(f"  Passenger {i+1}: {p['name']} ({p['phone']}) - Seat {p['seat_number']}")
+        
+        # Use first passenger as primary contact
+        primary_passenger = passengers_list[0]
+        passenger_name = primary_passenger['name']
+        passenger_phone = primary_passenger['phone']
+        passenger_email = primary_passenger.get('email', '')
 
         # Get schedule details and validate
         schedule = db.busschedules.find_one({'_id': ObjectId(data['schedule_id'])})
@@ -556,9 +621,10 @@ def create_booking():
             'pnr_number': pnr,
             'schedule_id': data['schedule_id'],
             'user_id': current_user_id,
-            'passenger_name': data['passenger_name'],
-            'passenger_phone': data['passenger_phone'],
-            'passenger_email': data.get('passenger_email'),
+            'passenger_name': passenger_name,  # Primary passenger
+            'passenger_phone': passenger_phone,  # Primary passenger
+            'passenger_email': passenger_email,  # Primary passenger
+            'passengers': passengers_list,  # All passengers with their details
             
             # Baggage Information
             'has_baggage': has_baggage,
@@ -694,7 +760,7 @@ def create_booking():
         except Exception as loyalty_error:
             print(f"⚠️ Error updating user booking count: {str(loyalty_error)}")
         
-        print(f"✅ Booking created successfully. ID: {booking_id}, Status: {booking_status}, Seats: {num_seats}")
+        print(f"✅ Booking created successfully. ID: {booking_id}, Status: {booking_status}, Seats: {num_seats}, Passengers: {len(passengers_list)}")
         
         return jsonify({
             'message': 'Booking created successfully',
@@ -705,6 +771,8 @@ def create_booking():
             'total_amount': total_amount,
             'status': booking_status,  # Return 'pending' status
             'payment_status': payment_status,  # Return 'paid' status
+            'passengers': passengers_list,  # Return all passengers
+            'passenger_count': len(passengers_list),
             'route': f"{departure_city} → {arrival_city}",
             'travel_date': travel_date,
             'departure_time': departure_time,

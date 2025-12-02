@@ -124,9 +124,12 @@ def login():
             'name': user['name'],
             'email': user['email'],
             'phone': user.get('phone', ''),
+            'date_of_birth': user.get('birthday', ''),  # Map birthday to date_of_birth for frontend
+            'address': user.get('address', ''),
             'role': user['role'],
             'is_active': user.get('is_active', True), 
-            'created_at': user['created_at'].isoformat() if user.get('created_at') else None
+            'created_at': user['created_at'].isoformat() if user.get('created_at') else None,
+            'updated_at': user.get('updated_at').isoformat() if user.get('updated_at') else None
         }
         
         # Add loyalty points for customers
@@ -134,6 +137,9 @@ def login():
             user_response['loyalty_points'] = user.get('loyalty_points', 0)
             user_response['loyalty_tier'] = user.get('loyalty_tier', 'member')
             user_response['total_bookings'] = user.get('total_bookings', 0)
+            user_response['free_trips_remaining'] = user.get('free_trips_remaining', 0)
+            user_response['free_trips_used'] = user.get('free_trips_used', 0)
+            user_response['tier_year_start'] = user.get('tier_year_start').isoformat() if user.get('tier_year_start') else None
 
         return jsonify({
             'access_token': access_token,
@@ -160,8 +166,12 @@ def get_current_user():
             'name': user['name'],
             'email': user['email'],
             'phone': user.get('phone', ''),
+            'date_of_birth': user.get('birthday', ''),  # Map birthday to date_of_birth for frontend
+            'address': user.get('address', ''),
             'role': user['role'],
-            'created_at': user['created_at'].isoformat() if user.get('created_at') else None
+            'is_active': user.get('is_active', True),
+            'created_at': user['created_at'].isoformat() if user.get('created_at') else None,
+            'updated_at': user['updated_at'].isoformat() if user.get('updated_at') else None
         }
         
         # Add loyalty data for customers
@@ -169,6 +179,9 @@ def get_current_user():
             user_response['loyalty_points'] = user.get('loyalty_points', 0)
             user_response['loyalty_tier'] = user.get('loyalty_tier', 'member')
             user_response['total_bookings'] = user.get('total_bookings', 0)
+            user_response['free_trips_remaining'] = user.get('free_trips_remaining', 0)
+            user_response['free_trips_used'] = user.get('free_trips_used', 0)
+            user_response['tier_year_start'] = user.get('tier_year_start').isoformat() if user.get('tier_year_start') else None
 
         return jsonify(user_response), 200
 
@@ -178,6 +191,87 @@ def get_current_user():
 
 
 @auth_bp.route('/profile', methods=['PUT'])
+@jwt_required()
+def update_profile():
+    """Update user profile information"""
+    try:
+        current_user_id = get_jwt_identity()
+        data = request.get_json()
+        
+        print(f"📝 Profile update request for user: {current_user_id}")
+        print(f"📊 Update data: {data}")
+        
+        # Get user
+        user = mongo.db.users.find_one({'_id': ObjectId(current_user_id)})
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Build update document
+        update_fields = {
+            'updated_at': datetime.utcnow()
+        }
+        
+        # Update allowed fields
+        if 'name' in data:
+            update_fields['name'] = data['name']
+        if 'email' in data:
+            # Check if email is already taken by another user
+            existing_user = mongo.db.users.find_one({
+                'email': data['email'],
+                '_id': {'$ne': ObjectId(current_user_id)}
+            })
+            if existing_user:
+                return jsonify({'error': 'Email already in use'}), 400
+            update_fields['email'] = data['email']
+        if 'phone' in data:
+            update_fields['phone'] = data['phone']
+        if 'address' in data:
+            update_fields['address'] = data['address']
+        if 'date_of_birth' in data:
+            # Map date_of_birth to birthday in database
+            update_fields['birthday'] = data['date_of_birth']
+        
+        # Update user
+        mongo.db.users.update_one(
+            {'_id': ObjectId(current_user_id)},
+            {'$set': update_fields}
+        )
+        
+        # Get updated user
+        updated_user = mongo.db.users.find_one({'_id': ObjectId(current_user_id)})
+        
+        # Build response
+        user_response = {
+            'id': str(updated_user['_id']),
+            'name': updated_user['name'],
+            'email': updated_user['email'],
+            'phone': updated_user.get('phone', ''),
+            'date_of_birth': updated_user.get('birthday', ''),  # Map birthday to date_of_birth
+            'address': updated_user.get('address', ''),
+            'role': updated_user['role'],
+            'is_active': updated_user.get('is_active', True),
+            'created_at': updated_user['created_at'].isoformat() if updated_user.get('created_at') else None,
+            'updated_at': updated_user['updated_at'].isoformat() if updated_user.get('updated_at') else None
+        }
+        
+        # Add loyalty data for customers
+        if updated_user['role'] == 'customer':
+            user_response['loyalty_points'] = updated_user.get('loyalty_points', 0)
+            user_response['loyalty_tier'] = updated_user.get('loyalty_tier', 'member')
+            user_response['total_bookings'] = updated_user.get('total_bookings', 0)
+            user_response['free_trips_remaining'] = updated_user.get('free_trips_remaining', 0)
+            user_response['free_trips_used'] = updated_user.get('free_trips_used', 0)
+            user_response['tier_year_start'] = updated_user.get('tier_year_start').isoformat() if updated_user.get('tier_year_start') else None
+        
+        print(f"✅ Profile updated successfully for user: {current_user_id}")
+        
+        return jsonify(user_response), 200
+        
+    except Exception as e:
+        print(f"❌ Error updating profile: {str(e)}")
+        return jsonify({'error': 'Failed to update profile'}), 500
+
+@auth_bp.route('/change-password', methods=['POST'])
 @jwt_required()
 def change_password():
     """Change user password"""

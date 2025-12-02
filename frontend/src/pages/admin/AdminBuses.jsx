@@ -221,14 +221,8 @@ const Buses = () => {
   }
 
   const getBusImage = (bus) => {
-    const busImages = {
-      luxury: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=500&h=300&fit=crop',
-      premium: 'https://images.unsplash.com/photo-1502872362448-2c2cee83dba8?w=500&h=300&fit=crop',
-      standard: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=500&h=300&fit=crop',
-      sleeper: 'https://images.unsplash.com/photo-1502872362448-2c2cee83dba8?w=500&h=300&fit=crop'
-    }
-    
-    return bus.image_url || busImages[bus.type] || 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=500&h=300&fit=crop'
+    // Use the same image for all buses (Simien Mountains bus image)
+    return bus.image_url || 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=500&h=300&fit=crop'
   }
 
   // Bus Detail Modal Component
@@ -480,6 +474,10 @@ const Buses = () => {
       manufacturer: bus?.manufacturer || '',
       model_year: bus?.model_year || new Date().getFullYear(),
       fuel_type: bus?.fuel_type || 'diesel',
+      engine_capacity: bus?.engine_capacity || '',
+      transmission: bus?.transmission || 'manual',
+      mileage: bus?.mileage || '',
+      insurance_valid_until: bus?.insurance_valid_until || '',
       amenities: bus?.amenities || ['wifi', 'air_conditioning'],
       notes: bus?.notes || ''
     })
@@ -524,76 +522,176 @@ const Buses = () => {
           </div>
 
           <form onSubmit={handleSubmit} className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Plate Number *</label>
-                <input
-                  type="text"
-                  value={formData.plate_number}
-                  onChange={(e) => setFormData(prev => ({ ...prev, plate_number: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ethio-green focus:border-ethio-green"
-                  required
-                />
-              </div>
+            {/* Basic Information */}
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                <Car className="h-5 w-5 mr-2 text-indigo-600" />
+                Basic Information
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Plate Number *</label>
+                  <input
+                    type="text"
+                    value={formData.plate_number}
+                    onChange={(e) => setFormData(prev => ({ ...prev, plate_number: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ethio-green focus:border-ethio-green"
+                    required
+                  />
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Bus Name *</label>
-                <input
-                  type="text"
-                  value={formData.bus_name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, bus_name: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ethio-green focus:border-ethio-green"
-                  required
-                />
-              </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Bus Name *</label>
+                  <input
+                    type="text"
+                    value={formData.bus_name}
+                    onChange={(e) => setFormData(prev => ({ ...prev, bus_name: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ethio-green focus:border-ethio-green"
+                    required
+                  />
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Bus Number</label>
-                <input
-                  type="text"
-                  value={formData.bus_number}
-                  onChange={(e) => setFormData(prev => ({ ...prev, bus_number: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ethio-green focus:border-ethio-green"
-                />
-              </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Bus Number</label>
+                  <input
+                    type="text"
+                    value={formData.bus_number}
+                    onChange={(e) => setFormData(prev => ({ ...prev, bus_number: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ethio-green focus:border-ethio-green"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Capacity</label>
-                <input
-                  type="number"
-                  value={formData.capacity}
-                  onChange={(e) => setFormData(prev => ({ ...prev, capacity: parseInt(e.target.value) }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ethio-green focus:border-ethio-green"
-                  min="1"
-                  max="100"
-                />
-              </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Capacity</label>
+                  <input
+                    type="number"
+                    value={formData.capacity}
+                    onChange={(e) => setFormData(prev => ({ ...prev, capacity: parseInt(e.target.value) }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ethio-green focus:border-ethio-green"
+                    min="1"
+                    max="100"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
-                <select
-                  value={formData.type}
-                  onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ethio-green focus:border-ethio-green"
-                >
-                  <option value="standard">Standard</option>
-                  <option value="premium">Premium</option>
-                  <option value="luxury">Luxury</option>
-                  <option value="sleeper">Sleeper</option>
-                </select>
-              </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
+                  <select
+                    value={formData.type}
+                    onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ethio-green focus:border-ethio-green"
+                  >
+                    <option value="standard">Standard</option>
+                    <option value="premium">Premium</option>
+                    <option value="luxury">Luxury</option>
+                    <option value="sleeper">Sleeper</option>
+                  </select>
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                <select
-                  value={formData.status}
-                  onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ethio-green focus:border-ethio-green"
-                >
-                  <option value="active">Active</option>
-                  <option value="maintenance">Maintenance</option>
-                  <option value="inactive">Inactive</option>
-                </select>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ethio-green focus:border-ethio-green"
+                  >
+                    <option value="active">Active</option>
+                    <option value="maintenance">Maintenance</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Manufacturer</label>
+                  <input
+                    type="text"
+                    value={formData.manufacturer}
+                    onChange={(e) => setFormData(prev => ({ ...prev, manufacturer: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ethio-green focus:border-ethio-green"
+                    placeholder="e.g., Mercedes-Benz, Volvo"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Model Year</label>
+                  <input
+                    type="number"
+                    value={formData.model_year}
+                    onChange={(e) => setFormData(prev => ({ ...prev, model_year: parseInt(e.target.value) }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ethio-green focus:border-ethio-green"
+                    min="1990"
+                    max={new Date().getFullYear() + 1}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Technical Specifications */}
+            <div className="mb-6 border-t pt-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                <Settings className="h-5 w-5 mr-2 text-indigo-600" />
+                Technical Specifications
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Fuel Type</label>
+                  <select
+                    value={formData.fuel_type}
+                    onChange={(e) => setFormData(prev => ({ ...prev, fuel_type: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ethio-green focus:border-ethio-green"
+                  >
+                    <option value="diesel">Diesel</option>
+                    <option value="petrol">Petrol</option>
+                    <option value="electric">Electric</option>
+                    <option value="hybrid">Hybrid</option>
+                    <option value="cng">CNG</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Engine Capacity</label>
+                  <input
+                    type="text"
+                    value={formData.engine_capacity}
+                    onChange={(e) => setFormData(prev => ({ ...prev, engine_capacity: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ethio-green focus:border-ethio-green"
+                    placeholder="e.g., 6.7L, 8.0L"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Transmission</label>
+                  <select
+                    value={formData.transmission}
+                    onChange={(e) => setFormData(prev => ({ ...prev, transmission: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ethio-green focus:border-ethio-green"
+                  >
+                    <option value="manual">Manual</option>
+                    <option value="automatic">Automatic</option>
+                    <option value="semi-automatic">Semi-Automatic</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Mileage (km)</label>
+                  <input
+                    type="number"
+                    value={formData.mileage}
+                    onChange={(e) => setFormData(prev => ({ ...prev, mileage: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ethio-green focus:border-ethio-green"
+                    placeholder="Total kilometers driven"
+                    min="0"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Insurance Valid Until</label>
+                  <input
+                    type="date"
+                    value={formData.insurance_valid_until}
+                    onChange={(e) => setFormData(prev => ({ ...prev, insurance_valid_until: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ethio-green focus:border-ethio-green"
+                  />
+                </div>
               </div>
             </div>
 

@@ -408,11 +408,49 @@ export const adminService = {
   },
 
   async createDriver(driverData) {
-    return this.createEntity('driver', driverData)
+    try {
+      console.log('🔄 Creating driver with data:', driverData)
+      
+      // Check if driverData is FormData (has files)
+      if (driverData instanceof FormData) {
+        console.log('📤 Sending driver data as multipart/form-data')
+        const response = await api.post('/admin/driver', driverData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        })
+        return response.data
+      } else {
+        // Regular JSON data
+        return this.createEntity('driver', driverData)
+      }
+    } catch (error) {
+      console.error('❌ Error creating driver:', error)
+      throw this.handleError(error)
+    }
   },
 
   async updateDriver(id, driverData) {
-    return this.updateEntity('driver', id, driverData)
+    try {
+      console.log(`🔄 Updating driver ${id} with data:`, driverData)
+      
+      // Check if driverData is FormData (has files)
+      if (driverData instanceof FormData) {
+        console.log('📤 Sending driver update as multipart/form-data')
+        const response = await api.put(`/admin/driver/${id}`, driverData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        })
+        return response.data
+      } else {
+        // Regular JSON data
+        return this.updateEntity('driver', id, driverData)
+      }
+    } catch (error) {
+      console.error(`❌ Error updating driver ${id}:`, error)
+      throw this.handleError(error)
+    }
   },
 
   async updateDriverStatus(id, status) {

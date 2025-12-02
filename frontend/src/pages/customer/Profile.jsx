@@ -17,6 +17,7 @@ const SharedProfile = () => {
     confirmPassword: ''
   })
   const [passwordError, setPasswordError] = useState('')
+  const [showLoyaltyPolicyModal, setShowLoyaltyPolicyModal] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -571,16 +572,25 @@ const SharedProfile = () => {
             {/* Loyalty Header */}
             <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl shadow-lg p-6 text-white mb-6">
               <div className="flex items-center justify-between">
-                <div>
+                <div className="flex-1">
                   <h2 className="text-2xl font-bold mb-2">🎁 Loyalty Rewards</h2>
                   <p className="text-indigo-100">Earn points, unlock benefits, and enjoy exclusive perks</p>
                 </div>
-                {loyaltyData && (
-                  <div className="text-right">
-                    <p className="text-indigo-100 text-sm">Your Points</p>
-                    <p className="text-4xl font-bold">{loyaltyData.loyalty_points?.toLocaleString() || 0}</p>
-                  </div>
-                )}
+                <div className="flex items-center gap-4">
+                  {loyaltyData && (
+                    <div className="text-right">
+                      <p className="text-indigo-100 text-sm">Your Points</p>
+                      <p className="text-4xl font-bold">{loyaltyData.loyalty_points?.toLocaleString() || 0}</p>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => setShowLoyaltyPolicyModal(true)}
+                    className="px-6 py-3 bg-white text-indigo-600 font-semibold rounded-xl hover:bg-indigo-50 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 flex items-center gap-2"
+                  >
+                    <Shield className="h-5 w-5" />
+                    View Policy
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -784,6 +794,239 @@ const SharedProfile = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Loyalty Policy Modal */}
+        {showLoyaltyPolicyModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full my-8 relative max-h-[90vh] overflow-y-auto">
+              <button
+                onClick={() => setShowLoyaltyPolicyModal(false)}
+                className="sticky top-4 right-4 float-right text-gray-400 hover:text-gray-600 bg-white rounded-full p-2 shadow-lg z-10"
+              >
+                <X className="h-6 w-6" />
+              </button>
+
+              {/* Header */}
+              <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 px-8 py-8 text-white">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center">
+                    <Award className="h-8 w-8" />
+                  </div>
+                  <div>
+                    <h2 className="text-3xl font-bold">Loyalty Program Policy</h2>
+                    <p className="text-indigo-100 mt-1">Earn rewards, enjoy benefits, travel more!</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="p-8 space-y-8">
+                {/* Overview */}
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                    <Star className="h-6 w-6 text-yellow-500" />
+                    Program Overview
+                  </h3>
+                  <p className="text-gray-700 leading-relaxed">
+                    Welcome to our Loyalty Rewards Program! We value your continued patronage and have designed this program to reward you for choosing us for your travel needs. Earn points with every booking, unlock exclusive benefits, and enjoy special perks as you progress through our tier system.
+                  </p>
+                </div>
+
+                {/* Membership Tiers */}
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                    <TrendingUp className="h-6 w-6 text-blue-500" />
+                    Membership Tiers
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-6 rounded-xl border-2 border-gray-300">
+                      <div className="text-4xl mb-3">👤</div>
+                      <h4 className="text-lg font-bold text-gray-900 mb-2">Member</h4>
+                      <p className="text-sm text-gray-600 mb-3">Starting tier for all new customers</p>
+                      <div className="space-y-2 text-sm">
+                        <p className="flex items-center gap-2">
+                          <span className="text-green-600">✓</span>
+                          <span>0% discount</span>
+                        </p>
+                        <p className="flex items-center gap-2">
+                          <span className="text-green-600">✓</span>
+                          <span>Earn points</span>
+                        </p>
+                        <p className="text-xs text-gray-500 mt-3">0-499 points</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-xl border-2 border-orange-400">
+                      <div className="text-4xl mb-3">🥉</div>
+                      <h4 className="text-lg font-bold text-orange-900 mb-2">Bronze</h4>
+                      <p className="text-sm text-orange-700 mb-3">Unlock with 500 points</p>
+                      <div className="space-y-2 text-sm">
+                        <p className="flex items-center gap-2">
+                          <span className="text-green-600">✓</span>
+                          <span>5% discount</span>
+                        </p>
+                        <p className="flex items-center gap-2">
+                          <span className="text-green-600">✓</span>
+                          <span>Priority support</span>
+                        </p>
+                        <p className="flex items-center gap-2">
+                          <span className="text-green-600">✓</span>
+                          <span>Birthday bonus</span>
+                        </p>
+                        <p className="text-xs text-orange-600 mt-3">500-1,999 points</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-gray-200 to-gray-300 p-6 rounded-xl border-2 border-gray-500">
+                      <div className="text-4xl mb-3">🥈</div>
+                      <h4 className="text-lg font-bold text-gray-900 mb-2">Silver</h4>
+                      <p className="text-sm text-gray-700 mb-3">Unlock with 2,000 points</p>
+                      <div className="space-y-2 text-sm">
+                        <p className="flex items-center gap-2">
+                          <span className="text-green-600">✓</span>
+                          <span>10% discount</span>
+                        </p>
+                        <p className="flex items-center gap-2">
+                          <span className="text-green-600">✓</span>
+                          <span>1 free trip/year</span>
+                        </p>
+                        <p className="flex items-center gap-2">
+                          <span className="text-green-600">✓</span>
+                          <span>Seat selection</span>
+                        </p>
+                        <p className="text-xs text-gray-600 mt-3">2,000-4,999 points</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-yellow-200 to-yellow-300 p-6 rounded-xl border-2 border-yellow-600 shadow-lg">
+                      <div className="text-4xl mb-3">🥇</div>
+                      <h4 className="text-lg font-bold text-yellow-900 mb-2">Gold</h4>
+                      <p className="text-sm text-yellow-800 mb-3">Unlock with 5,000 points</p>
+                      <div className="space-y-2 text-sm">
+                        <p className="flex items-center gap-2">
+                          <span className="text-green-600">✓</span>
+                          <span>15% discount</span>
+                        </p>
+                        <p className="flex items-center gap-2">
+                          <span className="text-green-600">✓</span>
+                          <span>2 free trips/year</span>
+                        </p>
+                        <p className="flex items-center gap-2">
+                          <span className="text-green-600">✓</span>
+                          <span>VIP lounge access</span>
+                        </p>
+                        <p className="text-xs text-yellow-700 mt-3">5,000+ points</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* How to Earn Points */}
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                    <Gift className="h-6 w-6 text-purple-500" />
+                    How to Earn Points
+                  </h3>
+                  <div className="bg-gradient-to-br from-purple-50 to-pink-50 p-6 rounded-xl border border-purple-200">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 bg-purple-500 text-white rounded-lg flex items-center justify-center flex-shrink-0 font-bold">
+                          100
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-900">Book a Trip</p>
+                          <p className="text-sm text-gray-600">Earn 100 points for every booking you make</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 bg-green-500 text-white rounded-lg flex items-center justify-center flex-shrink-0 font-bold">
+                          50
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-900">Complete a Trip</p>
+                          <p className="text-sm text-gray-600">Get 50 bonus points when you complete your journey</p>
+                        </div>
+                      </div>
+                    
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 bg-pink-500 text-white rounded-lg flex items-center justify-center flex-shrink-0 font-bold">
+                          500
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-900">Birthday Bonus</p>
+                          <p className="text-sm text-gray-600">Receive 500 points on your birthday (Bronze tier and above)</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Terms & Conditions */}
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                    <Shield className="h-6 w-6 text-red-500" />
+                    Terms & Conditions
+                  </h3>
+                  <div className="bg-gray-50 p-6 rounded-xl border border-gray-200 space-y-3 text-sm text-gray-700">
+                    <p className="flex items-start gap-2">
+                      <span className="text-indigo-600 font-bold">•</span>
+                      <span>Points are earned on completed bookings only. Cancelled bookings will not earn points.</span>
+                    </p>
+                    <p className="flex items-start gap-2">
+                      <span className="text-indigo-600 font-bold">•</span>
+                      <span>Points expire after 12 months of account inactivity.</span>
+                    </p>
+                    <p className="flex items-start gap-2">
+                      <span className="text-indigo-600 font-bold">•</span>
+                      <span>Tier status is reviewed annually based on points accumulated in the past 12 months.</span>
+                    </p>
+                    <p className="flex items-start gap-2">
+                      <span className="text-indigo-600 font-bold">•</span>
+                      <span>Discounts cannot be combined with other promotional offers unless explicitly stated.</span>
+                    </p>
+                    <p className="flex items-start gap-2">
+                      <span className="text-indigo-600 font-bold">•</span>
+                      <span>Free trips are subject to availability and blackout dates may apply during peak seasons.</span>
+                    </p>
+                    <p className="flex items-start gap-2">
+                      <span className="text-indigo-600 font-bold">•</span>
+                      <span>Points and benefits are non-transferable and cannot be exchanged for cash.</span>
+                    </p>
+                    <p className="flex items-start gap-2">
+                      <span className="text-indigo-600 font-bold">•</span>
+                      <span>We reserve the right to modify the loyalty program terms with 30 days notice to members.</span>
+                    </p>
+                    <p className="flex items-start gap-2">
+                      <span className="text-indigo-600 font-bold">•</span>
+                      <span>Fraudulent activity or abuse of the program may result in account suspension and forfeiture of points.</span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Contact */}
+                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-6 rounded-xl border border-indigo-200">
+                  <h4 className="font-bold text-gray-900 mb-2">Questions about the Loyalty Program?</h4>
+                  <p className="text-sm text-gray-700 mb-3">
+                    Our customer support team is here to help you make the most of your rewards.
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Email: <a href="mailto:loyalty@busticket.com" className="text-indigo-600 font-semibold hover:underline">loyalty@busticket.com</a>
+                  </p>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="bg-gray-50 px-8 py-6 border-t border-gray-200">
+                <button
+                  onClick={() => setShowLoyaltyPolicyModal(false)}
+                  className="w-full px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl"
+                >
+                  Got it, thanks!
+                </button>
+              </div>
             </div>
           </div>
         )}
