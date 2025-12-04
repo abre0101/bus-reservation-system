@@ -661,6 +661,41 @@ const BookingDetails = () => {
     }
   }
 
+  // Check if cancellation is pending
+  const isCancellationPending = () => {
+    return booking?.cancellation_requested === true && booking?.cancellation_status === 'pending'
+  }
+
+  // Get check-in button state
+  const getCheckinButtonState = () => {
+    if (!booking) return { disabled: true, message: 'Loading...', icon: Clock }
+    
+    // If cancellation is pending, disable check-in
+    if (isCancellationPending()) {
+      return { 
+        disabled: true, 
+        message: 'Check-in disabled - Cancellation request pending',
+        icon: Ban
+      }
+    }
+    
+    // If check-in time window is available
+    if (isCheckinAvailable()) {
+      return { 
+        disabled: false, 
+        message: 'Check-in Online',
+        icon: CheckCircle
+      }
+    }
+    
+    // Check-in not yet available
+    return { 
+      disabled: true, 
+      message: 'Check-in opens 24h before departure',
+      icon: Clock
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
@@ -1110,22 +1145,34 @@ const BookingDetails = () => {
                 <Download className="h-5 w-5" />
                 <span>Download Ticket</span>
               </button>
-              {upcoming && booking.status === 'confirmed' && isCheckinAvailable() && (
-                <Link
-                  to="/customer/checkin"
-                  state={{ booking }}
-                  className="flex items-center justify-center space-x-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all duration-200 font-semibold shadow-sm hover:shadow-md text-center"
-                >
-                  <CheckCircle className="h-5 w-5" />
-                  <span>Check-in Online</span>
-                </Link>
-              )}
-              {upcoming && booking.status === 'confirmed' && !isCheckinAvailable() && (
-                <div className="flex items-center justify-center space-x-2 px-6 py-3 bg-gray-300 text-gray-600 rounded-lg cursor-not-allowed text-center">
-                  <Clock className="h-5 w-5" />
-                  <span>Check-in opens 24h before departure</span>
-                </div>
-              )}
+              {upcoming && booking.status === 'confirmed' && (() => {
+                const checkinState = getCheckinButtonState()
+                const ButtonIcon = checkinState.icon
+                
+                if (checkinState.disabled) {
+                  return (
+                    <div className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-lg cursor-not-allowed text-center ${
+                      isCancellationPending() 
+                        ? 'bg-orange-100 text-orange-700 border-2 border-orange-300' 
+                        : 'bg-gray-300 text-gray-600'
+                    }`}>
+                      <ButtonIcon className="h-5 w-5" />
+                      <span>{checkinState.message}</span>
+                    </div>
+                  )
+                }
+                
+                return (
+                  <Link
+                    to="/customer/checkin"
+                    state={{ booking }}
+                    className="flex items-center justify-center space-x-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all duration-200 font-semibold shadow-sm hover:shadow-md text-center"
+                  >
+                    <ButtonIcon className="h-5 w-5" />
+                    <span>{checkinState.message}</span>
+                  </Link>
+                )
+              })()}
               {canRequestCancellation() && (
                 <button
                   onClick={() => setShowCancellationModal(true)}

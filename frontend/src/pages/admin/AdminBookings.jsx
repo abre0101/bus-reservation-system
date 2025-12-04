@@ -144,7 +144,7 @@ const AdminBookings = () => {
     }
   }
 
-  // FIXED: Make stats dynamic based on filtered bookings
+  // FIXED: Make stats dynamic based on filtered bookings with refund accounting
   const stats = {
     total: filteredBookings.length,
     confirmed: filteredBookings.filter(b => b.status === 'confirmed').length,
@@ -154,7 +154,23 @@ const AdminBookings = () => {
     completed: filteredBookings.filter(b => b.status === 'completed').length,
     revenue: filteredBookings
       .filter(b => b.payment_status === 'paid')
-      .reduce((sum, b) => sum + (b.total_amount || 0), 0),
+      .reduce((sum, b) => {
+        const totalAmount = b.total_amount || 0
+        const status = b.status
+        const cancellationStatus = b.cancellation_status
+        
+        // For cancelled bookings with approved status, only count cancellation fee
+        if (status === 'cancelled' && cancellationStatus === 'approved') {
+          const refundAmount = b.refund_amount || 0
+          const expectedPct = b.expected_refund_percentage || 0
+          const actualRefund = refundAmount > 0 ? refundAmount : (totalAmount * expectedPct / 100)
+          const cancellationFee = totalAmount - actualRefund
+          return sum + cancellationFee
+        }
+        
+        // For non-cancelled bookings, count full amount
+        return sum + totalAmount
+      }, 0),
     totalPassengers: filteredBookings.reduce((sum, b) => {
       const seats = b.seat_numbers?.length || (b.seat_number ? 1 : 0)
       return sum + seats
@@ -254,9 +270,9 @@ const AdminBookings = () => {
         <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-indigo-100 text-xs font-medium uppercase tracking-wide mb-1">Revenue</p>
+              <p className="text-indigo-100 text-xs font-medium uppercase tracking-wide mb-1">Net Revenue</p>
               <p className="text-3xl font-bold">{stats.revenue.toLocaleString()}</p>
-              <p className="text-xs text-indigo-100 mt-1">ETB collected</p>
+              <p className="text-xs text-indigo-100 mt-1">ETB (after refunds)</p>
             </div>
             <div className="bg-indigo-400 bg-opacity-30 rounded-xl p-2">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

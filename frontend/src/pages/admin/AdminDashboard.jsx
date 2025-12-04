@@ -35,7 +35,53 @@ const AdminDashboard = () => {
     try {
       setLoading(true)
       
-      // Fetch all data using adminService with fallback
+      // First, try to fetch stats from the backend endpoint
+      try {
+        console.log('📊 Fetching dashboard stats from backend...')
+        const statsResponse = await api.get('/admin/dashboard/stats')
+        const backendStats = statsResponse.data
+        
+        console.log('✅ Backend stats received:', backendStats)
+        
+        // If we have backend stats, use them
+        if (backendStats && backendStats.is_real_data) {
+          setStats({
+            totalUsers: backendStats.total_users || 0,
+            newUsersToday: backendStats.today_new_users || 0,
+            totalDrivers: backendStats.total_drivers || 0,
+            totalBuses: backendStats.total_buses || 0,
+            activeBuses: backendStats.active_buses || 0,
+            totalRoutes: backendStats.total_routes || 0,
+            totalSchedules: backendStats.total_schedules || 0,
+            todaySchedules: backendStats.today_schedules || 0,
+            totalBookings: timeFilter === 'all' ? backendStats.total_bookings : 
+                          timeFilter === 'month' ? backendStats.monthly_bookings :
+                          timeFilter === 'week' ? backendStats.weekly_bookings :
+                          backendStats.today_bookings,
+            todayBookings: backendStats.today_bookings || 0,
+            totalRevenue: timeFilter === 'all' ? backendStats.total_revenue :
+                         timeFilter === 'month' ? backendStats.monthly_revenue :
+                         timeFilter === 'week' ? backendStats.weekly_revenue :
+                         backendStats.today_revenue,
+            todayRevenue: backendStats.today_revenue || 0,
+            pendingBookings: backendStats.today_pending || 0,
+            confirmedBookings: backendStats.today_confirmed || 0
+          })
+          
+          setBusStatus({
+            active: backendStats.active_buses || 0,
+            maintenance: backendStats.maintenance_buses || 0,
+            inactive: backendStats.inactive_buses || 0
+          })
+          
+          setLoading(false)
+          return // Exit early if backend stats work
+        }
+      } catch (statsError) {
+        console.warn('⚠️ Backend stats not available, falling back to manual calculation:', statsError.message)
+      }
+      
+      // Fallback: Fetch all data using adminService
       const fetchWithFallback = async (fetchFn, entityName, entityKey) => {
         try {
           const data = await fetchFn()
@@ -260,7 +306,7 @@ const AdminDashboard = () => {
             timeFilter === 'week' ? 'New Users This Week' :
             'New Users This Month'
           }
-          value={stats.totalUsers}
+          value={timeFilter === 'today' ? (stats.newUsersToday || 0) : stats.totalUsers}
           subValue={`${stats.totalDrivers} drivers in system`}
           color="border-blue-500"
           onClick={() => navigate('/admin/users')}
@@ -319,7 +365,7 @@ const AdminDashboard = () => {
             timeFilter === 'week' ? 'Departures This Week' :
             'Departures This Month'
           }
-          value={stats.totalSchedules}
+          value={timeFilter === 'today' ? (stats.todaySchedules || 0) : stats.totalSchedules}
           subValue={timeFilter === 'today' ? `${stats.todaySchedules} trips scheduled` : `${stats.todaySchedules} departing today`}
           color="border-teal-500"
           onClick={() => navigate('/admin/schedules')}

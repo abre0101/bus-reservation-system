@@ -19,6 +19,7 @@ const DriverLayout = ({ children }) => {
     { path: '/driver/active-trip', icon: '🎯', label: 'Active Trip' },
     { path: '/driver/passengers', icon: '👥', label: 'Passengers' },
     { path: '/driver/schedules', icon: '📅', label: 'Schedules' },
+    { path: '/driver/bus-report', icon: '📋', label: 'Bus Report' },
     { path: '/driver/profile', icon: '👤', label: 'Profile' },
   ]
 

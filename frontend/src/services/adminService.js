@@ -463,7 +463,33 @@ export const adminService = {
 
   // Payment methods
   async getPayments(params = {}) {
-    return this.getEntities('payment', params)
+    try {
+      console.log('🔄 Fetching payments with refund stats')
+      const response = await api.get('/admin/payments')
+      console.log('✅ Payments response:', response.data)
+      
+      const data = response.data
+      
+      // Handle new response format with refund_stats
+      if (data && data.payments) {
+        return {
+          payments: data.payments,
+          refund_stats: data.refund_stats || { total_refunds: 0, refunded_bookings_count: 0 }
+        }
+      } else if (data && data.payments) {
+        // Legacy format
+        return { payments: data.payments, refund_stats: { total_refunds: 0, refunded_bookings_count: 0 } }
+      } else if (Array.isArray(data)) {
+        // Array format
+        return { payments: data, refund_stats: { total_refunds: 0, refunded_bookings_count: 0 } }
+      } else {
+        console.warn('⚠️ Unexpected payments response format:', data)
+        return { payments: [], refund_stats: { total_refunds: 0, refunded_bookings_count: 0 } }
+      }
+    } catch (error) {
+      console.error('❌ Error getting payments:', error)
+      throw this.handleError(error)
+    }
   },
 
   // Enhanced error handler

@@ -13,6 +13,7 @@ const Footer = () => {
     { path: '/contact', label: 'Contact' },
     { path: '/faq', label: 'FAQ' },
     { path: '/search', label: 'Book Tickets' },
+    { path: '/terms-and-policies', label: 'Terms & Policies' },
   ]
 
   const popularRoutes = [
@@ -153,8 +154,8 @@ const Footer = () => {
               </span>
             </div>
             <div className="flex space-x-4 text-gray-300 text-sm">
+              <Link to="/terms-and-policies" className="hover:text-white">Terms & Policies</Link>
               <Link to="/privacy" className="hover:text-white">Privacy</Link>
-              <Link to="/terms" className="hover:text-white">Terms</Link>
             </div>
           </div>
         </div>

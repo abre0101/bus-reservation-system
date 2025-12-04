@@ -160,29 +160,63 @@ const CancellationRequests = () => {
     const urgent = filteredRequests.filter(r => r.days_until_departure && r.days_until_departure < 3).length
     const moderate = filteredRequests.filter(r => r.days_until_departure && r.days_until_departure >= 3 && r.days_until_departure < 7).length
     const normal = filteredRequests.filter(r => r.days_until_departure && r.days_until_departure >= 7).length
-    const totalRefund = filteredRequests.reduce((sum, r) => sum + ((r.total_amount || 0) * 0.60), 0)
+    
+    // Only count approved refunds in the total
+    const approvedRequests = filteredRequests.filter(r => r.cancellation_status === 'approved')
+    const totalRefund = approvedRequests.reduce((sum, r) => {
+      // Use actual refund_amount if available, otherwise calculate from expected percentage
+      const refundAmount = r.refund_amount || ((r.total_amount || 0) * ((r.expected_refund_percentage || 60) / 100))
+      return sum + refundAmount
+    }, 0)
+    
     const totalOriginal = filteredRequests.reduce((sum, r) => sum + (r.total_amount || 0), 0)
-    const totalFees = filteredRequests.reduce((sum, r) => sum + ((r.total_amount || 0) * 0.40), 0)
+    const totalFees = approvedRequests.reduce((sum, r) => {
+      const refundAmount = r.refund_amount || ((r.total_amount || 0) * ((r.expected_refund_percentage || 60) / 100))
+      return sum + ((r.total_amount || 0) - refundAmount)
+    }, 0)
+    
     return { total, urgent, moderate, normal, totalRefund, totalOriginal, totalFees }
   }
 
   const exportToCSV = () => {
-    const headers = ['PNR','Passenger','Phone','Route','Travel Date','Amount','Refund (60%)','Fee (40%)','Days Left','Request Date','Status','Approved/Rejected Date','Reason']
-    const rows = filteredRequests.map(req => [
-      req.pnr_number, 
-      req.passenger_name, 
-      req.passenger_phone,
-      `${req.departure_city} → ${req.arrival_city}`, 
-      req.travel_date,
-      req.total_amount, 
-      (req.total_amount * 0.60).toFixed(2), 
-      (req.total_amount * 0.40).toFixed(2),
-      req.days_until_departure?.toFixed(1) || 'N/A',
-      new Date(req.cancellation_request_date).toLocaleString(),
-      req.cancellation_status || 'pending',
-      req.cancellation_approved_at ? new Date(req.cancellation_approved_at).toLocaleString() : 'N/A',
-      req.cancellation_reason || 'N/A'
-    ])
+    const headers = ['PNR','Passenger','Phone','Route','Travel Date','Amount','Refund Amount','Refund %','Fee','Days Left','Request Date','Status','Approved/Rejected Date','Reason']
+    const rows = filteredRequests.map(req => {
+      const refundAmount = req.cancellation_status === 'approved' 
+        ? (req.refund_amount || (req.total_amount * ((req.expected_refund_percentage || 60) / 100))).toFixed(2)
+        : req.cancellation_status === 'rejected' 
+        ? '0.00'
+        : 'Pending'
+      
+      const refundPercentage = req.cancellation_status === 'approved' 
+        ? `${req.expected_refund_percentage || 60}%`
+        : req.cancellation_status === 'rejected'
+        ? '0%'
+        : `${req.expected_refund_percentage || 60}% (Expected)`
+      
+      const fee = req.cancellation_status === 'approved'
+        ? (req.total_amount - (req.refund_amount || (req.total_amount * ((req.expected_refund_percentage || 60) / 100)))).toFixed(2)
+        : req.cancellation_status === 'rejected'
+        ? req.total_amount.toFixed(2)
+        : 'Pending'
+      
+      return [
+        req.pnr_number, 
+        req.passenger_name, 
+        req.passenger_phone,
+        `${req.departure_city} → ${req.arrival_city}`, 
+        req.travel_date,
+        req.total_amount, 
+        refundAmount,
+        refundPercentage,
+        fee,
+        req.days_until_departure?.toFixed(1) || 'N/A',
+        new Date(req.cancellation_request_date).toLocaleString(),
+        req.cancellation_status || 'pending',
+        req.cancellation_approved_at ? new Date(req.cancellation_approved_at).toLocaleString() : 
+        req.cancellation_rejected_at ? new Date(req.cancellation_rejected_at).toLocaleString() : 'N/A',
+        req.cancellation_reason || 'N/A'
+      ]
+    })
     const csvContent = [headers.join(','), ...rows.map(row => row.map(cell => `"${cell}"`).join(','))].join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv' })
     const link = document.createElement('a')
@@ -283,8 +317,9 @@ const CancellationRequests = () => {
           <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-green-100 text-sm font-medium uppercase tracking-wide">Total Refund</p>
+                <p className="text-green-100 text-sm font-medium uppercase tracking-wide">Approved Refunds</p>
                 <p className="text-3xl font-bold mt-2">{stats.totalRefund.toFixed(0)} ETB</p>
+                <p className="text-green-100 text-xs mt-1">Only approved requests</p>
               </div>
               <div className="bg-green-400 bg-opacity-30 rounded-xl p-3">
                 <DollarSign className="h-8 w-8" />
@@ -493,9 +528,25 @@ const CancellationRequests = () => {
                       
                       <div className="flex items-center gap-4">
                         <div className="text-right">
-                          <p className="text-xl font-bold text-green-600">{(request.total_amount * 0.60).toFixed(0)} ETB</p>
-                          <p className="text-xs text-gray-500">Refund (60%)</p>
-                          <p className="text-xs text-gray-400 line-through">{request.total_amount} ETB</p>
+                          {request.cancellation_status === 'approved' ? (
+                            <>
+                              <p className="text-xl font-bold text-green-600">{request.refund_amount?.toFixed(0) || (request.total_amount * 0.60).toFixed(0)} ETB</p>
+                              <p className="text-xs text-gray-500">Refund ({request.expected_refund_percentage || 60}%)</p>
+                              <p className="text-xs text-gray-400 line-through">{request.total_amount} ETB</p>
+                            </>
+                          ) : request.cancellation_status === 'rejected' ? (
+                            <>
+                              <p className="text-xl font-bold text-red-600">0 ETB</p>
+                              <p className="text-xs text-red-500">Rejected</p>
+                              <p className="text-xs text-gray-400">{request.total_amount} ETB</p>
+                            </>
+                          ) : (
+                            <>
+                              <p className="text-xl font-bold text-blue-600">Pending</p>
+                              <p className="text-xs text-gray-500">Expected: {request.expected_refund_percentage || 60}%</p>
+                              <p className="text-xs text-gray-400">{request.total_amount} ETB</p>
+                            </>
+                          )}
                         </div>
                         {isExpanded ? <ChevronUp className="h-5 w-5 text-gray-400" /> : <ChevronDown className="h-5 w-5 text-gray-400" />}
                       </div>

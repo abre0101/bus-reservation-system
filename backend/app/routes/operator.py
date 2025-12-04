@@ -146,20 +146,37 @@ def get_revenue_analysis():
             total_bookings_count = len(bookings)
             total_revenue = sum(b.get('total_amount', 0) for b in bookings)
             confirmed_revenue = sum(b.get('total_amount', 0) for b in bookings if b.get('status') != 'cancelled')
-            cancelled_revenue = sum(b.get('total_amount', 0) for b in bookings if b.get('status') == 'cancelled')
+            
+            # Calculate actual revenue from cancelled bookings (cancellation fees only)
+            cancelled_bookings_list = [b for b in bookings if b.get('status') == 'cancelled']
+            cancelled_revenue_lost = 0  # Total refunded
+            cancellation_fees_earned = 0  # Fees we keep
+            
+            for booking in cancelled_bookings_list:
+                total_amount = booking.get('total_amount', 0)
+                refund_amount = booking.get('refund_amount', 0)
+                if refund_amount == 0 and booking.get('expected_refund_percentage'):
+                    refund_amount = total_amount * (booking.get('expected_refund_percentage', 60) / 100)
+                cancellation_fee = total_amount - refund_amount
+                cancelled_revenue_lost += refund_amount
+                cancellation_fees_earned += cancellation_fee
+            
+            # Net revenue = confirmed bookings + cancellation fees
+            net_revenue = confirmed_revenue + cancellation_fees_earned
             
             # Count bookings by status
             confirmed_bookings = len([b for b in bookings if b.get('status') in ['confirmed', 'pending']])
             checked_in_bookings = len([b for b in bookings if b.get('status') in ['checked_in', 'completed']])
-            cancelled_bookings = len([b for b in bookings if b.get('status') == 'cancelled'])
+            cancelled_bookings = len(cancelled_bookings_list)
             
             analysis[timeframe] = {
                 'date_range': f"{start_date.strftime('%Y-%m-%d')} to {(end_date - timedelta(days=1)).strftime('%Y-%m-%d')}",
                 'total_bookings': total_bookings_count,
                 'total_revenue': total_revenue,
                 'confirmed_revenue': confirmed_revenue,
-                'cancelled_revenue': cancelled_revenue,
-                'net_revenue': confirmed_revenue,
+                'cancelled_revenue_lost': cancelled_revenue_lost,
+                'cancellation_fees_earned': cancellation_fees_earned,
+                'net_revenue': net_revenue,
                 'bookings_by_status': {
                     'confirmed': confirmed_bookings,
                     'checked_in': checked_in_bookings,
@@ -744,11 +761,22 @@ def get_operator_dashboard_stats():
         period_bookings_count = len(timeframe_bookings)
         
         # Calculate revenue - include ALL bookings created in the period
-        period_revenue = sum(
-            booking.get('total_amount', 0) 
-            for booking in timeframe_bookings
-            if booking.get('status') != 'cancelled'  # Only count non-cancelled bookings for revenue
-        )
+        # For cancelled bookings, subtract the refund amount (keep the cancellation fee)
+        period_revenue = 0
+        for booking in timeframe_bookings:
+            if booking.get('status') == 'cancelled':
+                # For cancelled bookings, only count the cancellation fee (not the refund)
+                total_amount = booking.get('total_amount', 0)
+                refund_amount = booking.get('refund_amount', 0)
+                # If refund_amount is not set, calculate from expected percentage
+                if refund_amount == 0 and booking.get('expected_refund_percentage'):
+                    refund_amount = total_amount * (booking.get('expected_refund_percentage', 60) / 100)
+                # Revenue is total minus refund (i.e., the cancellation fee we keep)
+                cancellation_fee = total_amount - refund_amount
+                period_revenue += cancellation_fee
+            else:
+                # For non-cancelled bookings, count full amount
+                period_revenue += booking.get('total_amount', 0)
         
         # Count completed and cancelled trips created in the period
         completed_trips = len([b for b in timeframe_bookings if b.get('status') == 'completed'])
@@ -871,13 +899,22 @@ def get_operator_dashboard_stats():
             'created_at': {'$gte': prev_start, '$lt': prev_end}
         })
         
-        prev_revenue = sum(
-            b.get('total_amount', 0) 
-            for b in mongo.db.bookings.find({
-                'created_at': {'$gte': prev_start, '$lt': prev_end},
-                'status': {'$ne': 'cancelled'}
-            })
-        )
+        # Calculate previous period revenue with refunds accounted
+        prev_period_bookings = list(mongo.db.bookings.find({
+            'created_at': {'$gte': prev_start, '$lt': prev_end}
+        }))
+        
+        prev_revenue = 0
+        for booking in prev_period_bookings:
+            if booking.get('status') == 'cancelled':
+                total_amount = booking.get('total_amount', 0)
+                refund_amount = booking.get('refund_amount', 0)
+                if refund_amount == 0 and booking.get('expected_refund_percentage'):
+                    refund_amount = total_amount * (booking.get('expected_refund_percentage', 60) / 100)
+                cancellation_fee = total_amount - refund_amount
+                prev_revenue += cancellation_fee
+            else:
+                prev_revenue += booking.get('total_amount', 0)
         
         # Calculate percentage changes
         active_trips_trend = calculate_trend(active_trips, prev_active_trips)
@@ -4048,3 +4085,185 @@ def calculate_tariff():
     except Exception as e:
         logger.error(f"Calculate tariff error: {e}")
         return jsonify({'error': f'Failed to calculate tariff: {str(e)}'}), 500
+
+
+# ==================== BUS REPORTS MANAGEMENT ====================
+
+@operator_bp.route('/bus-reports', methods=['GET'])
+@jwt_required()
+def get_bus_reports():
+    """Get all bus reports for operator"""
+    try:
+        if not is_operator_or_admin():
+            return jsonify({'error': 'Operator access required'}), 403
+        
+        # Get query parameters
+        status = request.args.get('status')
+        severity = request.args.get('severity')
+        report_type = request.args.get('report_type')
+        bus_number = request.args.get('bus_number')
+        
+        # Build query
+        query = {}
+        if status:
+            query['status'] = status
+        if severity:
+            query['severity'] = severity
+        if report_type:
+            query['report_type'] = report_type
+        if bus_number:
+            query['bus_number'] = bus_number
+        
+        print(f"📋 Fetching bus reports with query: {query}")
+        
+        # Get reports sorted by creation date (newest first)
+        reports = list(mongo.db.bus_reports.find(query).sort('created_at', -1))
+        
+        print(f"✅ Found {len(reports)} bus reports")
+        
+        # Serialize reports
+        serialized_reports = []
+        for report in reports:
+            serialized_reports.append({
+                '_id': str(report['_id']),
+                'driver_id': report.get('driver_id'),
+                'driver_name': report.get('driver_name'),
+                'trip_id': report.get('trip_id'),
+                'bus_id': report.get('bus_id'),
+                'bus_number': report.get('bus_number'),
+                'bus_name': report.get('bus_name'),
+                'report_type': report.get('report_type'),
+                'severity': report.get('severity'),
+                'title': report.get('title'),
+                'description': report.get('description'),
+                'issue_category': report.get('issue_category'),
+                'fuel_level': report.get('fuel_level'),
+                'mileage': report.get('mileage'),
+                'status': report.get('status', 'pending'),
+                'operator_notes': report.get('operator_notes'),
+                'resolved_by': report.get('resolved_by'),
+                'resolved_at': report.get('resolved_at').isoformat() if report.get('resolved_at') else None,
+                'created_at': report.get('created_at').isoformat() if report.get('created_at') else None,
+                'updated_at': report.get('updated_at').isoformat() if report.get('updated_at') else None
+            })
+        
+        return jsonify({
+            'success': True,
+            'reports': serialized_reports,
+            'total': len(serialized_reports)
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Get bus reports error: {e}")
+        return jsonify({'error': f'Failed to fetch bus reports: {str(e)}'}), 500
+
+@operator_bp.route('/bus-reports/<report_id>', methods=['PATCH'])
+@jwt_required()
+def update_bus_report(report_id):
+    """Update bus report status and add notes"""
+    try:
+        if not is_operator_or_admin():
+            return jsonify({'error': 'Operator access required'}), 403
+        
+        data = request.get_json()
+        report_oid = validate_object_id(report_id)
+        
+        # Find the report
+        report = mongo.db.bus_reports.find_one({'_id': report_oid})
+        if not report:
+            return jsonify({'error': 'Report not found'}), 404
+        
+        # Build update data
+        update_data = {'updated_at': datetime.utcnow()}
+        
+        if 'status' in data:
+            update_data['status'] = data['status']
+            if data['status'] == 'resolved':
+                update_data['resolved_at'] = datetime.utcnow()
+                update_data['resolved_by'] = get_jwt_identity()
+        
+        if 'operator_notes' in data:
+            update_data['operator_notes'] = data['operator_notes']
+        
+        # Update the report
+        result = mongo.db.bus_reports.update_one(
+            {'_id': report_oid},
+            {'$set': update_data}
+        )
+        
+        if result.modified_count == 0:
+            return jsonify({'error': 'Failed to update report'}), 500
+        
+        # Get updated report
+        updated_report = mongo.db.bus_reports.find_one({'_id': report_oid})
+        
+        print(f"✅ Bus report updated: {report_id} - Status: {update_data.get('status', 'unchanged')}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Report updated successfully',
+            'report': serialize_document(updated_report)
+        }), 200
+        
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logger.error(f"Update bus report error: {e}")
+        return jsonify({'error': f'Failed to update report: {str(e)}'}), 500
+
+@operator_bp.route('/bus-reports/stats', methods=['GET'])
+@jwt_required()
+def get_bus_reports_stats():
+    """Get bus reports statistics"""
+    try:
+        if not is_operator_or_admin():
+            return jsonify({'error': 'Operator access required'}), 403
+        
+        # Get all reports
+        all_reports = list(mongo.db.bus_reports.find())
+        
+        # Calculate stats
+        total_reports = len(all_reports)
+        pending_reports = len([r for r in all_reports if r.get('status') == 'pending'])
+        in_progress_reports = len([r for r in all_reports if r.get('status') == 'in_progress'])
+        resolved_reports = len([r for r in all_reports if r.get('status') == 'resolved'])
+        
+        # Count by severity
+        critical_reports = len([r for r in all_reports if r.get('severity') == 'critical'])
+        high_reports = len([r for r in all_reports if r.get('severity') == 'high'])
+        medium_reports = len([r for r in all_reports if r.get('severity') == 'medium'])
+        low_reports = len([r for r in all_reports if r.get('severity') == 'low'])
+        
+        # Count by type
+        maintenance_reports = len([r for r in all_reports if r.get('report_type') == 'maintenance'])
+        issue_reports = len([r for r in all_reports if r.get('report_type') == 'issue'])
+        fuel_reports = len([r for r in all_reports if r.get('report_type') == 'fuel'])
+        status_reports = len([r for r in all_reports if r.get('report_type') == 'status'])
+        
+        return jsonify({
+            'success': True,
+            'stats': {
+                'total': total_reports,
+                'by_status': {
+                    'pending': pending_reports,
+                    'in_progress': in_progress_reports,
+                    'resolved': resolved_reports
+                },
+                'by_severity': {
+                    'critical': critical_reports,
+                    'high': high_reports,
+                    'medium': medium_reports,
+                    'low': low_reports
+                },
+                'by_type': {
+                    'maintenance': maintenance_reports,
+                    'issue': issue_reports,
+                    'fuel': fuel_reports,
+                    'status': status_reports
+                }
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Get bus reports stats error: {e}")
+        return jsonify({'error': f'Failed to fetch stats: {str(e)}'}), 500

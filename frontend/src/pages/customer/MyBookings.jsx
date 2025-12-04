@@ -271,6 +271,19 @@ const MyBookings = () => {
       }
     }
 
+    // Check if cancellation is pending
+    if (booking.cancellation_requested === true && booking.cancellation_status === 'pending') {
+      return {
+        status: 'cancellation_pending',
+        eligible: false,
+        message: 'Check-in disabled - Cancellation request pending',
+        icon: XCircleIcon,
+        color: 'text-orange-700',
+        bgColor: 'bg-orange-50',
+        borderColor: 'border-orange-300'
+      }
+    }
+
     if (!CHECK_IN_CONFIG.ENABLED) {
       return {
         status: 'disabled',
@@ -411,6 +424,16 @@ const MyBookings = () => {
         eligible: false,
         message: 'Cancellation is currently unavailable',
         requiresOperatorApproval: true,
+        refundPercentage: 0
+      }
+    }
+
+    // Prevent cancellation if user has already checked in
+    if (booking.status === 'checked_in' || booking.checked_in) {
+      return {
+        eligible: false,
+        message: 'Cannot cancel after check-in. Contact support.',
+        requiresOperatorApproval: false,
         refundPercentage: 0
       }
     }
@@ -676,6 +699,8 @@ const MyBookings = () => {
     if (booking.status === 'checked_in' || booking.checked_in) return false
     if (booking.payment_status !== 'paid') return false
     if (!booking.travel_date || !booking.departure_time) return false
+    // Prevent check-in if cancellation is pending
+    if (booking.cancellation_requested === true && booking.cancellation_status === 'pending') return false
     
     try {
       const now = new Date()

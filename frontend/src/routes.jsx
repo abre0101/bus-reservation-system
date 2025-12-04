@@ -39,6 +39,7 @@ import CustomerCheckin from './pages/customer/CustomerCheckin'
 
 // Shared Pages
 import Settings from './pages/shared/Settings'
+import TermsAndPolicies from './pages/shared/TermsAndPolicies'
 
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard'
@@ -67,6 +68,7 @@ import {
   DriverSchedules,
   DriverProfile
 } from './pages/driver'
+import BusReport from './pages/driver/BusReport'
 
 // Operator Pages
 import OperatorDashboard from './pages/operator/OperatorDashboard'
@@ -75,6 +77,7 @@ import CheckinPage from './pages/operator/CheckinPage'
 import OperatorReports from './pages/operator/OperatorReports'
 import CancellationRequests from './pages/operator/CancellationRequests'
 import BusTracking from './pages/operator/BusTracking'
+import BusReports from './pages/operator/BusReports'
 
 // Ticketer Pages (New Components)
 import TicketerDashboard from './pages/ticketer/TicketerDashboard'
@@ -218,6 +221,7 @@ const OperatorRoutesWrapper = () => (
         <Route path="dashboard" element={<OperatorDashboard />} />
         <Route path="schedules" element={<OperatorSchedules />} />
         <Route path="checkin" element={<CheckinPage />} />
+        <Route path="bus-reports" element={<BusReports />} />
         <Route path="reports" element={<OperatorReports />} />
         <Route path="tracking" element={<BusTracking />} />
         <Route path="cancellation-requests" element={<CancellationRequests />} />
@@ -240,6 +244,7 @@ const DriverRoutesWrapper = () => (
         <Route path="checkin/:tripId" element={<DriverCheckin />} />
         <Route path="passengers" element={<DriverPassengers />} />
         <Route path="schedules" element={<DriverSchedules />} />
+        <Route path="bus-report" element={<BusReport />} />
         <Route path="profile" element={<DriverProfile />} />
         <Route path="settings" element={<Settings />} />
       </Routes>
@@ -288,6 +293,7 @@ const AppRoutes = () => {
       <Route path="/schedules" element={<SchedulesPage />} />
       <Route path="/contact" element={<Contact />} />
       <Route path="/faq" element={<FAQ />} />
+      <Route path="/terms-and-policies" element={<TermsAndPolicies />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/operator/login" element={<OperatorLogin />} />

@@ -220,9 +220,9 @@ const CustomerManagement = () => {
         <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-purple-100 text-sm font-medium uppercase tracking-wide">Total Revenue</p>
+              <p className="text-purple-100 text-sm font-medium uppercase tracking-wide">Net Revenue</p>
               <p className="text-4xl font-bold mt-2">{customers.reduce((sum, c) => sum + (c.total_spent || 0), 0).toLocaleString()}</p>
-              <p className="text-purple-100 text-sm mt-1">ETB</p>
+              <p className="text-purple-100 text-sm mt-1">ETB (after refunds)</p>
             </div>
             <div className="bg-purple-400 bg-opacity-30 rounded-xl p-3">
               <TrendingUp className="h-8 w-8" />
@@ -326,10 +326,17 @@ const CustomerManagement = () => {
                       <div className="bg-green-50 p-3 rounded-lg border border-green-200">
                         <div className="flex items-center space-x-2 mb-1">
                           <TrendingUp className="h-4 w-4 text-green-600" />
-                          <span className="text-xs text-green-700 font-semibold uppercase">Spent</span>
+                          <span className="text-xs text-green-700 font-semibold uppercase">
+                            {customer.total_refunds > 0 ? 'Net Spent' : 'Total Spent'}
+                          </span>
                         </div>
                         <p className="text-lg font-bold text-green-900">{(customer.total_spent || 0).toLocaleString()}</p>
                         <p className="text-xs text-green-700">ETB</p>
+                        {customer.total_refunds > 0 && (
+                          <p className="text-xs text-orange-600 mt-1" title="This amount was already refunded to customer">
+                            ({customer.total_refunds.toLocaleString()} ETB refunded)
+                          </p>
+                        )}
                       </div>
                     </div>
 
@@ -501,11 +508,29 @@ const CustomerManagement = () => {
                         <span className="text-sm font-bold text-indigo-600">{selectedCustomer.booking_count || 0}</span>
                       </div>
                       <div className="flex justify-between items-center py-2 border-b border-gray-200">
-                        <span className="text-sm font-medium text-gray-600">Total Spent:</span>
+                        <span className="text-sm font-medium text-gray-600">
+                          {selectedCustomer?.total_refunds > 0 ? 'Net Spent (after refunds):' : 'Total Spent:'}
+                        </span>
                         <span className="text-sm font-bold text-green-600">
                           ETB {(selectedCustomer?.total_spent || 0).toLocaleString()}
                         </span>
                       </div>
+                      {selectedCustomer?.total_refunds > 0 && (
+                        <div className="flex justify-between items-center py-2 border-b border-gray-200 bg-orange-50">
+                          <span className="text-sm font-medium text-gray-600">Refunded to Customer:</span>
+                          <span className="text-sm font-bold text-orange-600">
+                            ETB {(selectedCustomer?.total_refunds || 0).toLocaleString()}
+                          </span>
+                        </div>
+                      )}
+                      {selectedCustomer?.cancelled_bookings > 0 && (
+                        <div className="flex justify-between items-center py-2 border-b border-gray-200">
+                          <span className="text-sm font-medium text-gray-600">Cancelled Bookings:</span>
+                          <span className="text-sm font-bold text-orange-600">
+                            {selectedCustomer?.cancelled_bookings || 0}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex justify-between items-center py-2 border-b border-gray-200">
                         <span className="text-sm font-medium text-gray-600">Loyalty Tier:</span>
                         <span className={`px-3 py-1 rounded-full text-xs font-bold shadow-md ${

@@ -352,6 +352,14 @@ const CheckIn = () => {
       return { valid: false, message: 'Passenger already checked in' };
     }
 
+    // Check if cancellation request is pending
+    if (booking.cancellation_requested === true && booking.cancellation_status === 'pending') {
+      return { 
+        valid: false, 
+        message: 'Cannot check in - Cancellation request pending. Operator must approve/reject first.' 
+      };
+    }
+
     // Check payment status
     if (booking.payment_status !== 'paid') {
       return { valid: false, message: 'Payment must be completed before check-in' };
@@ -984,17 +992,25 @@ const CheckIn = () => {
         <div id="booking-details" className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-semibold text-gray-900">Booking Details</h2>
-            <span className={`px-4 py-2 rounded-full text-sm font-medium ${
-              bookingDetails.check_in_status === 'checked_in' 
-                ? 'bg-green-100 text-green-800'
-                : bookingDetails.status === 'cancelled'
-                ? 'bg-red-100 text-red-800'
-                : 'bg-yellow-100 text-yellow-800'
-            }`}>
-              {bookingDetails.check_in_status === 'checked_in' ? '✓ Checked In' : 
-               bookingDetails.status === 'cancelled' ? '✗ Cancelled' :
-               '⏳ Pending Check-in'}
-            </span>
+            <div className="flex items-center gap-2">
+              {bookingDetails.cancellation_requested === true && bookingDetails.cancellation_status === 'pending' && (
+                <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 border-2 border-orange-300 flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  Cancellation Pending
+                </span>
+              )}
+              <span className={`px-4 py-2 rounded-full text-sm font-medium ${
+                bookingDetails.check_in_status === 'checked_in' 
+                  ? 'bg-green-100 text-green-800'
+                  : bookingDetails.status === 'cancelled'
+                  ? 'bg-red-100 text-red-800'
+                  : 'bg-yellow-100 text-yellow-800'
+              }`}>
+                {bookingDetails.check_in_status === 'checked_in' ? '✓ Checked In' : 
+                 bookingDetails.status === 'cancelled' ? '✗ Cancelled' :
+                 '⏳ Pending Check-in'}
+              </span>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1251,7 +1267,12 @@ const CheckIn = () => {
                       <td className="px-4 py-3 text-sm">{booking.departure_time}</td>
                       <td className="px-4 py-3 text-sm">{booking.seat_numbers?.join(', ') || booking.number_of_seats}</td>
                       <td className="px-4 py-3">
-                        {validation.valid ? (
+                        {booking.cancellation_requested === true && booking.cancellation_status === 'pending' ? (
+                          <span className="px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-full flex items-center gap-1 w-fit border border-orange-300">
+                            <AlertCircle className="w-3 h-3" />
+                            Cancel Pending
+                          </span>
+                        ) : validation.valid ? (
                           validation.warning ? (
                             <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full flex items-center gap-1 w-fit">
                               <AlertCircle className="w-3 h-3" />

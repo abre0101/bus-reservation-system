@@ -18,6 +18,7 @@ const OperatorLayout = ({ children }) => {
     { path: '/operator/schedules', icon: '📅', label: 'Schedules' },
     { path: '/operator/tracking', icon: '📍', label: 'Bus Tracking' },
     { path: '/operator/checkin', icon: '✅', label: 'Check-in' },
+    { path: '/operator/bus-reports', icon: '📋', label: 'Bus Reports' },
     { path: '/operator/reports', icon: '📈', label: 'Reports' },
     { path: '/operator/cancellation-requests', icon: '❌', label: 'Cancellations' },
   ]

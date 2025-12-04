@@ -335,7 +335,23 @@ def get_dashboard_stats():
         
         # Calculate stats
         total_bookings = len(user_bookings)
-        total_spent = sum(booking.get('total_amount', 0) for booking in user_bookings)
+        
+        # Calculate total spent - subtract refunds for cancelled bookings
+        total_spent = 0
+        for booking in user_bookings:
+            if booking.get('status') == 'cancelled':
+                # For cancelled bookings, only count what wasn't refunded (cancellation fee)
+                total_amount = booking.get('total_amount', 0)
+                refund_amount = booking.get('refund_amount', 0)
+                # If refund_amount is not set, calculate from expected percentage
+                if refund_amount == 0 and booking.get('expected_refund_percentage'):
+                    refund_amount = total_amount * (booking.get('expected_refund_percentage', 60) / 100)
+                # Customer spent = total - refund (i.e., the cancellation fee they paid)
+                cancellation_fee = total_amount - refund_amount
+                total_spent += cancellation_fee
+            else:
+                # For non-cancelled bookings, count full amount
+                total_spent += booking.get('total_amount', 0)
         
         # Count upcoming trips by checking each booking's schedule
         upcoming_trips = 0
@@ -378,13 +394,20 @@ def get_dashboard_stats():
         loyalty_points = user.get('loyalty_points', 0)
         loyalty_tier = user.get('loyalty_tier', 'member')
         
-        # Monthly spending
+        # Monthly spending - account for refunds
         one_month_ago = current_time - timedelta(days=30)
-        monthly_spent = sum(
-            booking.get('total_amount', 0) 
-            for booking in user_bookings 
-            if booking.get('created_at', current_time) >= one_month_ago
-        )
+        monthly_spent = 0
+        for booking in user_bookings:
+            if booking.get('created_at', current_time) >= one_month_ago:
+                if booking.get('status') == 'cancelled':
+                    total_amount = booking.get('total_amount', 0)
+                    refund_amount = booking.get('refund_amount', 0)
+                    if refund_amount == 0 and booking.get('expected_refund_percentage'):
+                        refund_amount = total_amount * (booking.get('expected_refund_percentage', 60) / 100)
+                    cancellation_fee = total_amount - refund_amount
+                    monthly_spent += cancellation_fee
+                else:
+                    monthly_spent += booking.get('total_amount', 0)
         
         stats_data = {
             'totalBookings': total_bookings,

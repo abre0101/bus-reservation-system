@@ -333,34 +333,49 @@ const OperatorReports = () => {
   };
 
   const filteredTodayBookings = reportData.todayBookings.filter(booking => {
-    const matchesBus = !filters.busNumber || booking.bus_number?.toLowerCase().includes(filters.busNumber.toLowerCase());
-    const matchesRoute = !filters.routeName || booking.route_name?.toLowerCase().includes(filters.routeName.toLowerCase());
+    const busNumber = booking.busNumber || booking.bus_number || '';
+    const routeName = booking.routeName || booking.route_name || '';
+    const passengerName = booking.passengerName || '';
+    const phoneNumber = booking.phoneNumber || '';
+    
+    const matchesBus = !filters.busNumber || busNumber.toLowerCase().includes(filters.busNumber.toLowerCase());
+    const matchesRoute = !filters.routeName || routeName.toLowerCase().includes(filters.routeName.toLowerCase());
     const matchesSearch = !filters.searchTerm || 
-      booking.passengerName?.toLowerCase().includes(filters.searchTerm.toLowerCase()) ||
-      booking.phoneNumber?.includes(filters.searchTerm);
+      passengerName.toLowerCase().includes(filters.searchTerm.toLowerCase()) ||
+      phoneNumber.includes(filters.searchTerm);
     return matchesBus && matchesRoute && matchesSearch;
   });
 
   const filteredTomorrowBookings = reportData.tomorrowBookings.filter(booking => {
-    const matchesBus = !filters.busNumber || booking.bus_number?.toLowerCase().includes(filters.busNumber.toLowerCase());
-    const matchesRoute = !filters.routeName || booking.route_name?.toLowerCase().includes(filters.routeName.toLowerCase());
+    const busNumber = booking.busNumber || booking.bus_number || '';
+    const routeName = booking.routeName || booking.route_name || '';
+    const passengerName = booking.passengerName || '';
+    const phoneNumber = booking.phoneNumber || '';
+    
+    const matchesBus = !filters.busNumber || busNumber.toLowerCase().includes(filters.busNumber.toLowerCase());
+    const matchesRoute = !filters.routeName || routeName.toLowerCase().includes(filters.routeName.toLowerCase());
     const matchesSearch = !filters.searchTerm || 
-      booking.passengerName?.toLowerCase().includes(filters.searchTerm.toLowerCase()) ||
-      booking.phoneNumber?.includes(filters.searchTerm);
+      passengerName.toLowerCase().includes(filters.searchTerm.toLowerCase()) ||
+      phoneNumber.includes(filters.searchTerm);
     return matchesBus && matchesRoute && matchesSearch;
   });
 
   const groupBookingsByBusAndRoute = (bookings) => {
     const grouped = {};
     bookings.forEach(booking => {
-      const key = `${booking.bus_number}-${booking.route_name}`;
+      // Use camelCase field names from backend
+      const busNumber = booking.busNumber || booking.bus_number || 'N/A';
+      const routeName = booking.routeName || booking.route_name || 'Unknown Route';
+      const departureTime = booking.departureTime || booking.departure_time || 'N/A';
+      
+      const key = `${busNumber}-${routeName}`;
       if (!grouped[key]) {
         grouped[key] = {
-          bus_number: booking.bus_number,
-          route_name: booking.route_name,
-          departure_time: booking.departure_time,
-          origin: booking.origin,
-          destination: booking.destination,
+          bus_number: busNumber,
+          route_name: routeName,
+          departure_time: departureTime,
+          origin: booking.origin || 'Unknown',
+          destination: booking.destination || 'Unknown',
           bookings: [],
           totalRevenue: 0,
           totalSeats: 0

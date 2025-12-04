@@ -297,6 +297,14 @@ def get_driver_trips():
             passenger_count = mongo.db.bookings.count_documents(query)
             trip_data['passenger_count'] = passenger_count
             
+            # Add bus name by looking up bus details
+            bus_number = trip.get('bus_number') or trip.get('plate_number')
+            if bus_number:
+                bus = mongo.db.buses.find_one({'bus_number': bus_number}) or \
+                      mongo.db.buses.find_one({'plate_number': bus_number})
+                if bus:
+                    trip_data['bus_name'] = bus.get('bus_name') or bus.get('model')
+            
             serialized_trips.append(trip_data)
         
         return jsonify({
@@ -1172,6 +1180,118 @@ def complete_trip(trip_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# ==================== BUS REPORTS ====================
+@driver_app_bp.route('/bus-reports', methods=['POST'])
+@jwt_required()
+def submit_bus_report():
+    """Submit a bus report"""
+    try:
+        current_user = get_jwt_identity()
+        driver = mongo.db.users.find_one({'_id': ObjectId(current_user)})
+        
+        if not driver or driver.get('role') != 'driver':
+            return jsonify({'error': 'Driver access required'}), 403
+        
+        data = request.get_json()
+        trip_id = data.get('trip_id')
+        
+        if not trip_id:
+            return jsonify({'error': 'Trip ID is required'}), 400
+        
+        # Get trip details
+        trip = mongo.db.busschedules.find_one({'_id': ObjectId(trip_id)})
+        if not trip:
+            return jsonify({'error': 'Trip not found'}), 404
+        
+        # Get bus details
+        bus_number = trip.get('bus_number') or trip.get('plate_number')
+        bus = None
+        if bus_number:
+            bus = mongo.db.buses.find_one({'bus_number': bus_number}) or \
+                  mongo.db.buses.find_one({'plate_number': bus_number})
+        
+        # Create report
+        report = {
+            'driver_id': str(driver['_id']),
+            'driver_name': driver.get('full_name') or driver.get('name'),
+            'trip_id': trip_id,
+            'bus_id': str(bus['_id']) if bus else None,
+            'bus_number': bus_number,
+            'bus_name': bus.get('bus_name') if bus else None,
+            'report_type': data.get('reportType', 'status'),
+            'severity': data.get('severity', 'medium'),
+            'title': data.get('title', '').strip(),
+            'description': data.get('description', '').strip(),
+            'issue_category': data.get('issueCategory'),
+            'fuel_level': data.get('fuelLevel'),
+            'mileage': data.get('mileage'),
+            'status': 'pending',
+            'created_at': datetime.utcnow(),
+            'updated_at': datetime.utcnow()
+        }
+        
+        # Validate required fields
+        if not report['title']:
+            return jsonify({'error': 'Title is required'}), 400
+        
+        if not report['description']:
+            return jsonify({'error': 'Description is required'}), 400
+        
+        # Insert report
+        result = mongo.db.bus_reports.insert_one(report)
+        
+        print(f"✅ Bus report submitted: {report['title']} (ID: {result.inserted_id})")
+        
+        return jsonify({
+            'message': 'Report submitted successfully',
+            'report_id': str(result.inserted_id)
+        }), 201
+        
+    except Exception as e:
+        print(f"❌ Error submitting bus report: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@driver_app_bp.route('/bus-reports', methods=['GET'])
+@jwt_required()
+def get_bus_reports():
+    """Get driver's bus reports"""
+    try:
+        current_user = get_jwt_identity()
+        driver = mongo.db.users.find_one({'_id': ObjectId(current_user)})
+        
+        if not driver or driver.get('role') != 'driver':
+            return jsonify({'error': 'Driver access required'}), 403
+        
+        # Get reports for this driver
+        reports = list(mongo.db.bus_reports.find({
+            'driver_id': str(driver['_id'])
+        }).sort('created_at', -1))
+        
+        # Serialize reports
+        serialized_reports = []
+        for report in reports:
+            serialized_reports.append({
+                '_id': str(report['_id']),
+                'title': report.get('title'),
+                'description': report.get('description'),
+                'report_type': report.get('report_type'),
+                'severity': report.get('severity'),
+                'status': report.get('status', 'pending'),
+                'bus_number': report.get('bus_number'),
+                'bus_name': report.get('bus_name'),
+                'issue_category': report.get('issue_category'),
+                'fuel_level': report.get('fuel_level'),
+                'mileage': report.get('mileage'),
+                'created_at': report.get('created_at').isoformat() if report.get('created_at') else None,
+                'updated_at': report.get('updated_at').isoformat() if report.get('updated_at') else None
+            })
+        
+        return jsonify({'reports': serialized_reports}), 200
+        
+    except Exception as e:
+        print(f"❌ Error fetching bus reports: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 # ==================== SCHEDULES ====================
 @driver_app_bp.route('/schedules', methods=['GET'])
 @jwt_required()
@@ -1215,7 +1335,7 @@ def get_driver_schedules():
                 except:
                     route = mongo.db.routes.find_one({'_id': route_id})
             
-            # Get bus
+            # Get bus - try by ID first, then by bus_number
             bus_id = schedule.get('busId') or schedule.get('bus_id')
             bus = None
             if bus_id:
@@ -1223,6 +1343,13 @@ def get_driver_schedules():
                     bus = mongo.db.buses.find_one({'_id': ObjectId(bus_id)})
                 except:
                     bus = mongo.db.buses.find_one({'_id': bus_id})
+            
+            # If no bus found by ID, try by bus_number or plate_number
+            if not bus:
+                bus_number = schedule.get('bus_number') or schedule.get('plate_number')
+                if bus_number:
+                    bus = mongo.db.buses.find_one({'bus_number': bus_number}) or \
+                          mongo.db.buses.find_one({'plate_number': bus_number})
             
             # Get booked seats count
             query = get_schedule_id_query(str(schedule['_id']))
@@ -1262,8 +1389,12 @@ def get_driver_schedules():
                 'bus': {
                     'plate_number': bus.get('plate_number') if bus else schedule.get('plate_number'),
                     'bus_number': bus.get('bus_number') if bus else schedule.get('bus_number'),
+                    'name': (bus.get('name') or bus.get('bus_name') or bus.get('model')) if bus else (schedule.get('bus_name') or schedule.get('model')),
                     'capacity': bus.get('capacity') if bus else schedule.get('total_seats', 45)
-                }
+                },
+                'bus_name': (bus.get('name') or bus.get('bus_name') or bus.get('model')) if bus else (schedule.get('bus_name') or schedule.get('model')),
+                'plate_number': bus.get('plate_number') if bus else schedule.get('plate_number'),
+                'bus_number': bus.get('bus_number') if bus else schedule.get('bus_number')
             })
         
         return jsonify({'schedules': enriched_schedules}), 200

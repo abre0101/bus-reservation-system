@@ -942,6 +942,10 @@ def checkin_booking(booking_id):
         travel_date = booking.get('travel_date')
         departure_time = booking.get('departure_time')
         
+        # Prevent check-in if cancellation is requested
+        if booking.get('cancellation_requested'):
+            return jsonify({'error': 'Cannot check-in while cancellation request is pending'}), 400
+        
         if current_status not in ['confirmed', 'pending']:
             return jsonify({'error': 'Booking cannot be checked in'}), 400
         
@@ -1248,8 +1252,13 @@ def request_cancellation(booking_id):
             return jsonify({'error': 'Access denied'}), 403
             
         # Check if booking can be cancelled
-        if booking.get('status') in ['cancelled', 'checked_in', 'completed']:
-            return jsonify({'error': f'Booking is already {booking.get("status")}'}), 400
+        current_status = booking.get('status')
+        if current_status in ['cancelled', 'completed']:
+            return jsonify({'error': f'Booking is already {current_status}'}), 400
+        
+        # Prevent cancellation if user has already checked in
+        if current_status == 'checked_in':
+            return jsonify({'error': 'Cannot cancel booking after check-in. Please contact support.'}), 400
         
         # Check if cancellation request already exists
         if booking.get('cancellation_requested'):
@@ -1440,6 +1449,40 @@ def cancel_booking(booking_id):
             )
             print(f"🪑 Restored {num_seats} seats to schedule")
         
+        # Deduct loyalty points that were awarded for this booking
+        booking_user_id = booking.get('user_id')
+        if booking_user_id:
+            try:
+                # Deduct 100 points (the amount awarded at booking)
+                loyalty_points_to_deduct = 100
+                user_update = db.users.update_one(
+                    {'_id': ObjectId(booking_user_id)},
+                    {
+                        '$inc': {
+                            'loyalty_points': -loyalty_points_to_deduct,
+                            'total_bookings': -1  # Also decrement total bookings count
+                        }
+                    }
+                )
+                
+                if user_update.modified_count > 0:
+                    print(f"🎁 Deducted {loyalty_points_to_deduct} loyalty points from user {booking_user_id}")
+                    
+                    # Update user's loyalty tier based on new points
+                    customer = db.users.find_one({'_id': ObjectId(booking_user_id)})
+                    if customer and LOYALTY_ENABLED:
+                        new_points = max(0, customer.get('loyalty_points', 0))  # Ensure points don't go negative
+                        new_tier = get_loyalty_tier(new_points)
+                        db.users.update_one(
+                            {'_id': ObjectId(booking_user_id)},
+                            {'$set': {'loyalty_tier': new_tier, 'loyalty_points': new_points}}
+                        )
+                        print(f"🏆 Updated loyalty tier to: {new_tier} (Points: {new_points})")
+                else:
+                    print(f"⚠️ Failed to deduct loyalty points for user {booking_user_id}")
+            except Exception as loyalty_error:
+                print(f"⚠️ Error deducting loyalty points: {str(loyalty_error)}")
+        
         print(f"✅ Booking cancelled: {booking.get('pnr_number')}")
         print(f"   - Refund Amount: ETB {refund_amount}")
             
@@ -1605,17 +1648,27 @@ def reject_cancellation(booking_id):
         
         rejection_reason = data.get('reason', 'No reason provided')
         
-        # Update booking
+        # Update booking - clear cancellation request and mark as rejected
         result = db.bookings.update_one(
             {'_id': ObjectId(booking_id)},
-            {'$set': {
-                'cancellation_requested': False,
-                'cancellation_status': 'rejected',
-                'cancellation_rejected_by': current_user,
-                'cancellation_rejected_at': current_time,
-                'cancellation_rejection_reason': rejection_reason,
-                'updated_at': current_time
-            }}
+            {
+                '$set': {
+                    'cancellation_requested': False,
+                    'cancellation_status': 'rejected',
+                    'cancellation_rejected_by': current_user,
+                    'cancellation_rejected_at': current_time,
+                    'cancellation_rejection_reason': rejection_reason,
+                    'updated_at': current_time
+                },
+                '$unset': {
+                    'cancellation_request_date': '',
+                    'cancellation_reason': '',
+                    'expected_refund_percentage': '',
+                    'expected_refund_amount': '',
+                    'expected_cancellation_fee': '',
+                    'hours_until_departure_at_request': ''
+                }
+            }
         )
         
         if result.modified_count == 0:

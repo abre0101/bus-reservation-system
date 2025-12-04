@@ -196,44 +196,202 @@ def get_admin_dashboard_stats():
             'status': {'$in': ['completed', 'checked_in', 'confirmed', 'pending']}
         }
         
+        # Helper function to calculate revenue with refunds accounted
+        def calculate_revenue(bookings_list):
+            revenue = 0
+            print(f"\n💰 Calculating revenue from {len(bookings_list)} bookings:")
+            for booking in bookings_list:
+                pnr = booking.get('pnr_number', 'N/A')
+                total_amount = booking.get('total_amount', 0)
+                status = booking.get('status', 'unknown')
+                cancellation_status = booking.get('cancellation_status', None)
+                
+                if status == 'cancelled' or cancellation_status == 'approved':
+                    # For cancelled bookings, only count cancellation fee
+                    refund_amount = booking.get('refund_amount', 0)
+                    expected_pct = booking.get('expected_refund_percentage', 0)
+                    
+                    if refund_amount == 0 and expected_pct > 0:
+                        refund_amount = total_amount * (expected_pct / 100)
+                    
+                    cancellation_fee = total_amount - refund_amount
+                    revenue += cancellation_fee
+                    
+                    print(f"   📋 {pnr} (CANCELLED): Total={total_amount} ETB, Refund={refund_amount} ETB ({expected_pct}%), Fee={cancellation_fee} ETB")
+                else:
+                    # For non-cancelled bookings, count full amount
+                    revenue += total_amount
+                    cancellation_note = " (PENDING CANCELLATION)" if booking.get('cancellation_requested') else ""
+                    print(f"   📋 {pnr} ({status.upper()}){cancellation_note}: {total_amount} ETB")
+            
+            print(f"   ✅ Total Revenue: {revenue} ETB\n")
+            return revenue
+        
         # TODAY'S REAL STATS
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         today_end = today_start + timedelta(days=1)
-        today_bookings = list(mongo.db.bookings.find({
-            **base_query,
-            'created_at': {'$gte': today_start, '$lt': today_end}
-        }))
-        today_revenue = sum(b.get('total_amount', 0) for b in today_bookings)
+        
+        print(f"📅 Today range: {today_start} to {today_end}")
+        
+        # Get ALL bookings (not just paid ones) to count all bookings created today
+        all_bookings_list = list(mongo.db.bookings.find({}))
+        
+        print(f"🔍 Total bookings in database: {len(all_bookings_list)}")
+        
+        # Filter bookings created today manually (to handle different date formats)
+        today_bookings = []
+        for booking in all_bookings_list:
+            created_at = booking.get('created_at') or booking.get('booked_at')
+            if created_at:
+                # Handle both datetime objects and strings
+                if isinstance(created_at, str):
+                    try:
+                        created_at = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                    except Exception as e:
+                        print(f"   ⚠️ Could not parse date for booking {booking.get('pnr_number')}: {created_at}")
+                        continue
+                
+                # Check if created today
+                if today_start <= created_at < today_end:
+                    today_bookings.append(booking)
+                    print(f"   ✅ Found booking created today: PNR={booking.get('pnr_number')}, Status={booking.get('status')}, Created={created_at}")
+            else:
+                print(f"   ⚠️ Booking {booking.get('pnr_number')} has no created_at or booked_at field")
+        
+        print(f"📊 Found {len(today_bookings)} bookings created today")
+        
+        # Calculate revenue only from paid bookings created today
+        today_paid_bookings = [b for b in today_bookings if b.get('payment_status') == 'paid']
+        
+        print(f"\n🎯 TODAY'S BOOKINGS ONLY (for revenue calculation):")
+        for b in today_paid_bookings:
+            print(f"   - PNR: {b.get('pnr_number')}, Status: {b.get('status')}, Amount: {b.get('total_amount')} ETB, Created: {b.get('created_at')}")
+        
+        today_revenue = calculate_revenue(today_paid_bookings)
+        
+        print(f"💰 Today's Revenue: {today_revenue} ETB (from {len(today_paid_bookings)} paid bookings created today)")
         
         # WEEKLY REAL STATS (last 7 days)
         week_start = now - timedelta(days=7)
-        weekly_bookings = list(mongo.db.bookings.find({
-            **base_query,
-            'created_at': {'$gte': week_start, '$lt': now}
-        }))
-        weekly_revenue = sum(b.get('total_amount', 0) for b in weekly_bookings)
+        weekly_bookings = [b for b in all_bookings_list if b.get('created_at') and 
+                          (isinstance(b.get('created_at'), datetime) and week_start <= b.get('created_at') < now)]
+        weekly_paid = [b for b in weekly_bookings if b.get('payment_status') == 'paid']
+        weekly_revenue = calculate_revenue(weekly_paid)
         
         # MONTHLY REAL STATS (this month)
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        monthly_bookings = list(mongo.db.bookings.find({
-            **base_query,
-            'created_at': {'$gte': month_start, '$lt': now}
-        }))
-        monthly_revenue = sum(b.get('total_amount', 0) for b in monthly_bookings)
+        monthly_bookings = [b for b in all_bookings_list if b.get('created_at') and 
+                           (isinstance(b.get('created_at'), datetime) and month_start <= b.get('created_at') < now)]
+        monthly_paid = [b for b in monthly_bookings if b.get('payment_status') == 'paid']
+        monthly_revenue = calculate_revenue(monthly_paid)
         
         # ALL-TIME REAL STATS
-        all_bookings = list(mongo.db.bookings.find(base_query))
-        total_revenue = sum(b.get('total_amount', 0) for b in all_bookings)
-        total_bookings = len(all_bookings)
+        all_paid_bookings = [b for b in all_bookings_list if b.get('payment_status') == 'paid']
+        total_revenue = calculate_revenue(all_paid_bookings)
+        
+        # Count ALL bookings created today (including cancelled) - "Bookings Today" means booked today
+        today_bookings_count = len(today_bookings)
+        weekly_bookings_count = len(weekly_bookings)
+        monthly_bookings_count = len(monthly_bookings)
+        total_bookings = len(all_paid_bookings)
+        
+        # Count cancelled bookings for reference
+        today_cancelled = len([b for b in today_bookings if b.get('status') == 'cancelled'])
         
         # Other real counts from database
         users_count = mongo.db.users.count_documents({})
+        drivers_count = mongo.db.users.count_documents({'role': 'driver'})
         buses_count = mongo.db.buses.count_documents({'status': 'active'})
         routes_count = mongo.db.routes.count_documents({})
+        
+        # Today's new users - users created today (manual filtering for date format compatibility)
+        all_users = list(mongo.db.users.find({}))
+        today_new_users = 0
+        
+        print(f"\n👥 Checking {len(all_users)} users for today's registrations...")
+        
+        for user in all_users:
+            created_at = user.get('created_at')
+            if created_at:
+                original_created_at = created_at
+                if isinstance(created_at, str):
+                    try:
+                        created_at = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                    except Exception as e:
+                        print(f"   ⚠️ Could not parse date for user {user.get('email')}: {original_created_at}")
+                        continue
+                
+                if today_start <= created_at < today_end:
+                    today_new_users += 1
+                    print(f"   ✅ User created today: {user.get('email')} at {created_at}")
+        
+        print(f"👥 Found {today_new_users} new users created today\n")
+        
+        # Define today_date_str for use in travel bookings and schedules
+        today_date_str = today_start.strftime('%Y-%m-%d')
+        
+        # Get bookings for TODAY'S TRAVEL (not created today, but traveling today)
+        # These are bookings where the schedule's departure_date is today
+        print(f"🔍 Looking for bookings traveling today ({today_date_str})...")
+        
+        today_travel_bookings = []
+        for booking in list(mongo.db.bookings.find({'payment_status': 'paid'})):
+            schedule_id = booking.get('schedule_id')
+            if schedule_id:
+                try:
+                    schedule = mongo.db.busschedules.find_one({'_id': ObjectId(schedule_id)})
+                    if schedule:
+                        dep_date = schedule.get('departure_date')
+                        if dep_date:
+                            dep_date_str = None
+                            # Parse departure date
+                            if isinstance(dep_date, str):
+                                dep_date_str = dep_date.split('T')[0]
+                            elif isinstance(dep_date, datetime):
+                                dep_date_str = dep_date.strftime('%Y-%m-%d')
+                            
+                            # Check if departure is today
+                            if dep_date_str == today_date_str:
+                                today_travel_bookings.append(booking)
+                                print(f"   ✅ Booking {booking.get('pnr_number')} travels today (status: {booking.get('status')})")
+                except Exception as e:
+                    print(f"   ⚠️ Error processing booking {booking.get('_id')}: {e}")
+                    continue
+        
+        print(f"✈️ Found {len(today_travel_bookings)} bookings traveling today")
+        
+        # Pending Today = bookings with status 'pending' or 'confirmed' traveling today (awaiting check-in)
+        today_pending = len([b for b in today_travel_bookings if b.get('status') in ['pending', 'confirmed']])
+        
+        # Confirmed Today = bookings with status 'checked_in' traveling today (ready to go)
+        today_confirmed = len([b for b in today_travel_bookings if b.get('status') == 'checked_in'])
+        
+        print(f"📊 Today's travel stats: {today_pending} pending, {today_confirmed} checked in")
         
         # ENHANCED: Get maintenance and schedule statistics
         total_schedules = mongo.db.busschedules.count_documents({})
         active_schedules = mongo.db.busschedules.count_documents({'status': 'scheduled'})
+        
+        # Today's schedules - schedules with departure_date = today (today_date_str already defined above)
+        today_schedules = 0
+        all_schedules_list = list(mongo.db.busschedules.find({}))
+        
+        print(f"📅 Looking for schedules with departure_date = {today_date_str}")
+        
+        for schedule in all_schedules_list:
+            dep_date = schedule.get('departure_date')
+            if dep_date:
+                dep_date_str = None
+                if isinstance(dep_date, str):
+                    dep_date_str = dep_date.split('T')[0]
+                elif isinstance(dep_date, datetime):
+                    dep_date_str = dep_date.strftime('%Y-%m-%d')
+                
+                if dep_date_str == today_date_str:
+                    today_schedules += 1
+                    print(f"   ✅ Schedule {schedule.get('_id')} departs today")
+        
+        print(f"🚌 Found {today_schedules} schedules departing today")
         
         # Get schedules for maintenance analysis
         all_schedules = list(mongo.db.busschedules.find({'status': 'scheduled'}))
@@ -244,25 +402,42 @@ def get_admin_dashboard_stats():
         maintenance_buses = mongo.db.buses.count_documents({
             'status': {'$in': ['maintenance', 'inactive', 'under_maintenance']}
         })
+        inactive_buses = mongo.db.buses.count_documents({'status': 'inactive'})
         active_buses = total_buses - maintenance_buses
         
         stats = {
-            # Real revenue data from actual bookings
+            # Real revenue data from actual bookings (with refunds accounted)
             'today_revenue': today_revenue,
             'weekly_revenue': weekly_revenue,
             'monthly_revenue': monthly_revenue,
             'total_revenue': total_revenue,
             
-            # Real booking counts from actual bookings
-            'today_bookings': len(today_bookings),
-            'weekly_bookings': len(weekly_bookings),
-            'monthly_bookings': len(monthly_bookings),
+            # Real booking counts from actual bookings (including cancelled)
+            'today_bookings': today_bookings_count,
+            'today_cancelled': today_cancelled,
+            'weekly_bookings': weekly_bookings_count,
+            'monthly_bookings': monthly_bookings_count,
             'total_bookings': total_bookings,
             
-            # Other real counts from database
+            # Booking status counts for TODAY'S TRAVEL (not created today)
+            'today_pending': today_pending,  # Awaiting check-in for today's travel
+            'today_confirmed': today_confirmed,  # Checked in for today's travel
+            
+            # User counts
             'total_users': users_count,
+            'today_new_users': today_new_users,
+            'total_drivers': drivers_count,
+            
+            # Bus counts
             'total_buses': buses_count,
+            'active_buses': active_buses,
+            'inactive_buses': inactive_buses,
+            'maintenance_buses': maintenance_buses,
+            
+            # Route and schedule counts
             'total_routes': routes_count,
+            'total_schedules': total_schedules,
+            'today_schedules': today_schedules,
             
             # ENHANCED: Maintenance and schedule statistics
             'schedule_stats': {
@@ -332,13 +507,30 @@ def get_reports():
         
         query = {**base_query, 'created_at': {'$gte': start_date, '$lt': end_date}}
         
-        # GET REAL BOOKINGS DATA
-        bookings = list(mongo.db.bookings.find(query))
+        # GET REAL BOOKINGS DATA (including cancelled for complete picture)
+        all_period_bookings = list(mongo.db.bookings.find({
+            'payment_status': 'paid',
+            'created_at': {'$gte': start_date, '$lt': end_date}
+        }))
         
-        print(f"📊 REAL DATA: Found {len(bookings)} bookings for {report_type} report")
+        # Filter out cancelled bookings for counts
+        bookings = [b for b in all_period_bookings if b.get('status') != 'cancelled']
         
-        # Calculate REAL statistics from actual bookings
-        total_revenue = sum(booking.get('total_amount', 0) for booking in bookings)
+        print(f"📊 REAL DATA: Found {len(bookings)} active bookings (+ {len(all_period_bookings) - len(bookings)} cancelled) for {report_type} report")
+        
+        # Calculate REAL statistics from actual bookings with refunds accounted
+        total_revenue = 0
+        for booking in all_period_bookings:
+            if booking.get('status') == 'cancelled':
+                total_amount = booking.get('total_amount', 0)
+                refund_amount = booking.get('refund_amount', 0)
+                if refund_amount == 0 and booking.get('expected_refund_percentage'):
+                    refund_amount = total_amount * (booking.get('expected_refund_percentage', 60) / 100)
+                cancellation_fee = total_amount - refund_amount
+                total_revenue += cancellation_fee
+            else:
+                total_revenue += booking.get('total_amount', 0)
+        
         total_bookings = len(bookings)
         total_passengers = total_bookings  # Each booking = 1 passenger
         total_seats = sum(len(booking.get('seat_numbers', [])) for booking in bookings)
@@ -1065,7 +1257,52 @@ def get_all_drivers_legacy():
 @admin_bp.route('/payments', methods=['GET'])
 @jwt_required()
 def get_all_payments_legacy():
-    return get_all_entities('payment')
+    """Get all payments with refund statistics"""
+    try:
+        if not is_admin():
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        # Get all payments
+        payments = list(mongo.db.payments.find({}))
+        serialized_payments = [serialize_doc(payment) for payment in payments]
+        
+        # Get refund statistics from bookings
+        # Include all cancelled bookings with approved status, regardless of payment_status
+        cancelled_bookings = list(mongo.db.bookings.find({
+            'status': 'cancelled',
+            'cancellation_status': 'approved'
+        }))
+        
+        print(f"💰 Found {len(cancelled_bookings)} approved cancelled bookings for refund calculation")
+        
+        # Calculate total refunds
+        total_refunds = 0
+        for booking in cancelled_bookings:
+            pnr = booking.get('pnr_number', 'N/A')
+            total_amount = booking.get('total_amount', 0)
+            refund_amount = booking.get('refund_amount', 0)
+            expected_pct = booking.get('expected_refund_percentage', 0)
+            
+            if refund_amount == 0 and expected_pct > 0:
+                refund_amount = total_amount * (expected_pct / 100)
+            
+            total_refunds += refund_amount
+            print(f"   📋 {pnr}: Total={total_amount} ETB, Refund={refund_amount} ETB ({expected_pct}%%)")
+        
+        print(f"   ✅ Total Refunds: {total_refunds} ETB")
+        
+        # Add refund statistics to response
+        return jsonify({
+            'payments': serialized_payments,
+            'refund_stats': {
+                'total_refunds': round(total_refunds, 2),
+                'refunded_bookings_count': len(cancelled_bookings)
+            }
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Error in get_all_payments_legacy: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 # =========================================================================
 # EXPORT REPORTS
@@ -1276,8 +1513,45 @@ def get_customers():
             total_bookings = customer.get('total_bookings', 0)
             completed_trips = customer.get('completed_trips', 0)
             
-            # Calculate total_spent from bookings (excluding cancelled bookings)
-            total_spent = sum([b.get('total_amount', 0) for b in all_bookings if b.get('status') != 'cancelled'])
+            # Calculate total_spent from bookings accounting for refunds
+            total_spent = 0
+            total_refunds = 0
+            cancelled_count = 0
+            
+            print(f"\n💰 Calculating spending for customer: {customer.get('name')} ({customer.get('phone')})")
+            print(f"   Found {len(all_bookings)} total bookings")
+            
+            for booking in all_bookings:
+                pnr = booking.get('pnr_number', 'N/A')
+                total_amount = booking.get('total_amount', 0)
+                status = booking.get('status', '')
+                cancellation_status = booking.get('cancellation_status', None)
+                
+                if status == 'cancelled' and cancellation_status == 'approved':
+                    # For approved cancellations, only count the cancellation fee (not the refund)
+                    refund_amount = booking.get('refund_amount', 0)
+                    expected_pct = booking.get('expected_refund_percentage', 0)
+                    
+                    # Calculate refund if not stored
+                    if refund_amount == 0 and expected_pct > 0:
+                        refund_amount = total_amount * (expected_pct / 100)
+                    
+                    cancellation_fee = total_amount - refund_amount
+                    total_spent += cancellation_fee
+                    total_refunds += refund_amount
+                    cancelled_count += 1
+                    
+                    print(f"   📋 {pnr} (CANCELLED-APPROVED): Total={total_amount} ETB, Refund={refund_amount} ETB, Fee={cancellation_fee} ETB")
+                elif status == 'cancelled':
+                    # Cancelled but not approved - don't count at all
+                    print(f"   📋 {pnr} (CANCELLED-NOT APPROVED): Status={cancellation_status}, Skipped")
+                    pass
+                elif status != 'cancelled':
+                    # For non-cancelled bookings, count full amount
+                    total_spent += total_amount
+                    print(f"   📋 {pnr} ({status.upper()}): {total_amount} ETB")
+            
+            print(f"   ✅ Total Spent: {total_spent} ETB, Total Refunds: {total_refunds} ETB, Cancelled: {cancelled_count}")
             
             # Get last booking date from bookings
             last_booking = max([b.get('created_at') or b.get('booked_at') for b in all_bookings], default=None) if all_bookings else None
@@ -1288,6 +1562,8 @@ def get_customers():
             customer_data['loyalty_points'] = loyalty_points
             customer_data['last_booking'] = last_booking
             customer_data['total_spent'] = total_spent
+            customer_data['total_refunds'] = total_refunds
+            customer_data['cancelled_bookings'] = cancelled_count
             
             customers_data.append(customer_data)
 
