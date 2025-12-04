@@ -31,22 +31,29 @@ A comprehensive bus ticket booking and management platform designed for Ethiopia
 - 🚍 **Bus Management** - Add, edit, and manage bus fleet information
 - 🗺️ **Route Management** - Create and manage bus routes with multiple stops
 - ⏰ **Schedule Management** - Set up recurring and one-time schedules
-- � **Driverl Assignment** - Assign drivers to specific schedules
-- �  **Analytics Dashboard** - View booking statistics and revenue reports
+- 👨‍✈️ **Driver Assignment** - Assign drivers to specific schedules
+- 📊 **Analytics Dashboard** - View booking statistics and revenue reports
 - 🎟️ **Ticketer System** - Dedicated interface for ticket verification and check-in
+- 📋 **Bus Reports Management** - View, filter, and manage all driver-submitted bus reports
+- 🔄 **Report Status Updates** - Update report status (pending → in progress → resolved)
+- 📝 **Operator Notes** - Add notes and actions taken for each report
+- 📤 **Export Reports** - Export filtered reports to CSV or Excel for analysis
 
 ### For Drivers
-- � **Driuver Mobile App** - Dedicated interface for drivers
+- 📱 **Driver Mobile App** - Dedicated interface for drivers
 - ✅ **Passenger Check-in** - Scan QR codes to verify tickets
 - 🗺️ **Route Information** - View assigned routes and schedules
-- � **Treip Reports** - Track completed trips and passenger counts
+- 📊 **Trip Reports** - Track completed trips and passenger counts
+- 📋 **Bus Reporting System** - Submit maintenance, fuel, and issue reports with severity levels
+- 🔧 **Quick Report Templates** - Pre-configured templates for common bus issues
+- 📈 **Report History** - View status of submitted reports and operator responses
 
 ### For Admins
 - 👤 **User Management** - Manage all system users and roles
 - 💰 **Payment Tracking** - Monitor all transactions and refunds
-- � **Emer gency Controls** - Cancel schedules and handle emergencies
+- 🚨 **Emergency Controls** - Cancel schedules and handle emergencies
 - ⚙️ **System Settings** - Configure tariffs, fees, and system parameters
-- � **sComprehensive Reports** - Generate detailed analytics and reports
+- 📊 **Comprehensive Reports** - Generate detailed analytics and reports
 
 ## � Tec h Stack
 
@@ -301,6 +308,13 @@ http://localhost:5000
 - `DELETE /admin/users/:id` - Delete user
 - `GET /admin/statistics` - Get system statistics
 
+#### Bus Reports
+- `POST /driver/bus-reports` - Submit bus report (driver)
+- `GET /driver/bus-reports` - Get driver's reports
+- `GET /operator/bus-reports` - Get all bus reports (operator)
+- `PATCH /operator/bus-reports/:id` - Update report status and notes
+- `GET /operator/bus-reports/stats` - Get report statistics
+
 ## 👥 User Roles
 
 ### Customer
@@ -314,12 +328,17 @@ http://localhost:5000
 - Check-in passengers
 - Update trip status
 - View route information
+- Submit bus reports (maintenance, issues, fuel status)
+- Track report status and operator responses
 
 ### Operator
 - Manage buses
 - Create routes and schedules
 - Assign drivers
 - View analytics
+- Manage bus reports from drivers
+- Update report status and add notes
+- Export reports for maintenance planning
 
 ### Admin
 - Full system access
@@ -432,6 +451,8 @@ For support, email support@ethiobus.com or join our Slack channel.
 
 ## 🗺️ Roadmap
 
+- [x] Bus reporting system for drivers and operators
+- [x] Export functionality for bus reports
 - [ ] Mobile app for iOS and Android
 - [ ] Real-time bus tracking with GPS
 - [ ] Multi-language support (Amharic, Oromo, Tigrinya)
@@ -441,6 +462,8 @@ For support, email support@ethiobus.com or join our Slack channel.
 - [ ] Automated refund processing
 - [ ] SMS notifications
 - [ ] WhatsApp integration
+- [ ] Automated maintenance scheduling based on reports
+- [ ] Push notifications for critical bus issues
 
 ---
 
