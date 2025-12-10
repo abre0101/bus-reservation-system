@@ -18,6 +18,7 @@ import {
   Info
 } from 'lucide-react';
 import ticketerService from '../../services/ticketerService';
+import socketService from '../../services/socketService';
 import { toast } from 'react-toastify';
 import { printTicket } from '../../utils/exportUtils';
 
@@ -27,9 +28,11 @@ const QuickBooking = () => {
   const [selectedSchedule, setSelectedSchedule] = useState(null);
   const [availableSeats, setAvailableSeats] = useState([]);
   const [occupiedSeats, setOccupiedSeats] = useState([]);
+  const [lockedSeats, setLockedSeats] = useState([]);
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [selectedDate, setSelectedDate] = useState('');
+  const [socketConnected, setSocketConnected] = useState(false);
   
   const [bookingData, setBookingData] = useState({
     schedule_id: '',
@@ -84,17 +87,23 @@ const QuickBooking = () => {
       const occupiedResponse = await ticketerService.getOccupiedSeats(schedule._id);
       if (occupiedResponse?.success && Array.isArray(occupiedResponse?.occupiedSeats)) {
         setOccupiedSeats(occupiedResponse.occupiedSeats);
+        setLockedSeats(occupiedResponse.lockedSeats || []);
         
         // Generate available seats using bus capacity
         const totalSeats = schedule.total_seats || schedule.bus?.capacity || 45;
         const occupied = occupiedResponse.occupiedSeats;
+        const locked = occupiedResponse.lockedSeats || [];
         const available = [];
         for (let i = 1; i <= totalSeats; i++) {
-          if (!occupied.includes(i)) {
+          if (!occupied.includes(i) && !locked.includes(i)) {
             available.push(i);
           }
         }
         setAvailableSeats(available);
+        
+        // Connect to WebSocket for real-time updates
+        connectToWebSocket(schedule._id);
+        
         setStep(2);
       } else {
         console.error('Invalid occupied seats response:', occupiedResponse);
@@ -106,12 +115,74 @@ const QuickBooking = () => {
     }
   };
 
-  const handleSeatSelect = (seatNumber) => {
-    setBookingData(prev => ({
-      ...prev,
-      seat_numbers: [seatNumber]
-    }));
-    setStep(3);
+  const connectToWebSocket = (scheduleId) => {
+    try {
+      // Get ticketer user ID
+      const userStr = sessionStorage.getItem('user') || localStorage.getItem('user') || '{}';
+      const user = JSON.parse(userStr);
+      const userId = user._id || user.id || user.userId || 'ticketer';
+      
+      console.log('🔌 Ticketer connecting to WebSocket for schedule:', scheduleId);
+      
+      // Connect to WebSocket
+      socketService.connect();
+      setSocketConnected(true);
+      
+      // Join schedule room
+      socketService.joinSchedule(scheduleId, userId);
+      
+      // Listen for real-time seat updates
+      socketService.onSeatStatusUpdate((data) => {
+        console.log('📊 Ticketer received seat status update:', data);
+        setOccupiedSeats(data.occupied_seats || []);
+        setLockedSeats(data.locked_seats || []);
+      });
+      
+      socketService.onSeatsLocked((data) => {
+        console.log('🔒 Seats locked by user:', data);
+        setLockedSeats(prev => [...new Set([...prev, ...data.seat_numbers])]);
+      });
+      
+      socketService.onSeatsUnlocked((data) => {
+        console.log('🔓 Seats unlocked:', data);
+        setLockedSeats(prev => prev.filter(seat => !data.seat_numbers.includes(seat)));
+      });
+      
+      socketService.onSeatsBooked((data) => {
+        console.log('✅ Seats booked:', data);
+        setOccupiedSeats(prev => [...new Set([...prev, ...data.seat_numbers])]);
+        setLockedSeats(prev => prev.filter(seat => !data.seat_numbers.includes(seat)));
+      });
+      
+    } catch (error) {
+      console.error('❌ Failed to connect to WebSocket:', error);
+    }
+  };
+
+  const handleSeatSelect = async (seatNumber) => {
+    // Check if seat is locked by another user
+    if (lockedSeats.includes(seatNumber)) {
+      toast.warning(`Seat ${seatNumber} is currently being selected by another user. Please choose a different seat.`);
+      return;
+    }
+    
+    // Lock the seat via WebSocket
+    try {
+      const userStr = sessionStorage.getItem('user') || localStorage.getItem('user') || '{}';
+      const user = JSON.parse(userStr);
+      const userId = user._id || user.id || user.userId || 'ticketer';
+      
+      await socketService.lockSeats(selectedSchedule._id, [seatNumber], userId);
+      
+      setBookingData(prev => ({
+        ...prev,
+        seat_numbers: [seatNumber]
+      }));
+      setStep(3);
+    } catch (error) {
+      console.error('Failed to lock seat:', error);
+      toast.error(error.message || 'Failed to select seat. It may have been taken by another user.');
+    }
   };
 
   const handleInputChange = (field, value) => {
@@ -204,8 +275,17 @@ const QuickBooking = () => {
   };
 
   const handleNewBooking = () => {
+    // Disconnect from WebSocket
+    if (selectedSchedule) {
+      socketService.leaveSchedule(selectedSchedule._id);
+      socketService.removeAllListeners();
+    }
+    
     setStep(1);
     setSelectedSchedule(null);
+    setOccupiedSeats([]);
+    setLockedSeats([]);
+    setSocketConnected(false);
     setBookingData({
       schedule_id: '',
       passenger_name: '',
@@ -217,6 +297,16 @@ const QuickBooking = () => {
       payment_status: 'pending'
     });
   };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (selectedSchedule) {
+        socketService.leaveSchedule(selectedSchedule._id);
+        socketService.removeAllListeners();
+      }
+    };
+  }, [selectedSchedule]);
 
   const steps = [
     { number: 1, title: 'Select Schedule', icon: <Clock className="h-4 w-4" /> },
@@ -465,20 +555,32 @@ const QuickBooking = () => {
                   <div className="grid grid-cols-4 gap-4">
                     {Array.from({ length: selectedSchedule.total_seats || selectedSchedule.bus?.capacity || 45 }, (_, i) => i + 1).map((seat) => {
                       const isOccupied = occupiedSeats.includes(seat);
+                      const isLocked = lockedSeats.includes(seat);
                       const isSelected = bookingData.seat_numbers.includes(seat);
                       
                       return (
                         <button
                           key={seat}
-                          disabled={isOccupied}
+                          disabled={isOccupied || isLocked}
                           className={`relative p-4 rounded-xl border-2 text-center font-bold transition-all duration-200 transform ${
                             isSelected
                               ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white border-blue-700 shadow-lg scale-105'
                               : isOccupied
                               ? 'bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed opacity-50'
+                              : isLocked
+                              ? 'bg-gradient-to-br from-orange-100 to-orange-200 text-orange-700 border-orange-400 cursor-not-allowed opacity-70'
                               : 'bg-white text-gray-700 border-gray-300 hover:border-green-500 hover:bg-green-50 hover:scale-105 hover:shadow-md'
                           }`}
-                          onClick={() => !isOccupied && handleSeatSelect(seat)}
+                          onClick={() => !isOccupied && !isLocked && handleSeatSelect(seat)}
+                          title={
+                            isOccupied 
+                              ? `Seat ${seat} - Already booked`
+                              : isLocked
+                              ? `Seat ${seat} - Being selected by another user`
+                              : isSelected
+                              ? `Seat ${seat} - Your selection`
+                              : `Seat ${seat} - Available`
+                          }
                         >
                           <div className="text-lg">{seat}</div>
                           {isSelected && (
@@ -498,14 +600,28 @@ const QuickBooking = () => {
                   <span className="text-sm font-medium text-gray-700">Available</span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <div className="w-8 h-8 bg-gray-200 border-2 border-gray-300 rounded-lg opacity-50"></div>
-                  <span className="text-sm font-medium text-gray-700">Occupied</span>
-                </div>
-                <div className="flex items-center space-x-2">
                   <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 border-2 border-blue-700 rounded-lg"></div>
                   <span className="text-sm font-medium text-gray-700">Your Selection</span>
                 </div>
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 bg-gradient-to-br from-orange-100 to-orange-200 border-2 border-orange-400 rounded-lg opacity-70"></div>
+                  <span className="text-sm font-medium text-gray-700">Locked (Being Selected)</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 bg-gray-200 border-2 border-gray-300 rounded-lg opacity-50"></div>
+                  <span className="text-sm font-medium text-gray-700">Occupied (Booked)</span>
+                </div>
               </div>
+              
+              {/* Connection Status */}
+              {socketConnected && (
+                <div className="flex justify-center mb-4">
+                  <div className="flex items-center space-x-2 bg-green-50 border border-green-200 px-4 py-2 rounded-full">
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                    <span className="text-sm font-medium text-green-700">Live Updates Active</span>
+                  </div>
+                </div>
+              )}
 
               {/* Back Button */}
               <div className="flex justify-center">
