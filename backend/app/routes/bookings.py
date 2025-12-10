@@ -238,10 +238,26 @@ def calculate_baggage_fee_endpoint():
 
 @bookings_bp.route('/occupied-seats/<schedule_id>', methods=['GET'])
 def get_occupied_seats(schedule_id):
-    """Get all occupied seats for a specific schedule"""
+    """Get all occupied seats for a specific schedule (including locked seats)"""
     try:
+        from app.utils.seat_lock import get_locked_seats, get_user_locked_seats, cleanup_expired_locks
+        from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
+        
         db = get_db()
         print(f"🪑 Fetching occupied seats for schedule: {schedule_id}")
+        
+        # Clean up expired locks first
+        cleanup_expired_locks(schedule_id)
+        
+        # Try to get current user ID (optional - works without auth too)
+        current_user_id = None
+        try:
+            verify_jwt_in_request(optional=True)
+            current_user_id = get_jwt_identity()
+            print(f"👤 Current user ID from JWT: {current_user_id}")
+        except Exception as e:
+            print(f"⚠️ No JWT token found (this is OK): {e}")
+            pass
         
         # First check if schedule exists and is valid
         if is_valid_objectid(schedule_id):
@@ -253,7 +269,9 @@ def get_occupied_seats(schedule_id):
             return jsonify({
                 'success': False,
                 'error': 'Schedule not found',
-                'occupiedSeats': []
+                'occupiedSeats': [],
+                'lockedSeats': [],
+                'userLockedSeats': []
             }), 404
         
         # Check if schedule has departed
@@ -261,7 +279,9 @@ def get_occupied_seats(schedule_id):
             return jsonify({
                 'success': False,
                 'error': 'Schedule has already departed',
-                'occupiedSeats': []
+                'occupiedSeats': [],
+                'lockedSeats': [],
+                'userLockedSeats': []
             }), 400
         
         # Check if bus is under maintenance
@@ -274,10 +294,12 @@ def get_occupied_seats(schedule_id):
             return jsonify({
                 'success': False,
                 'error': 'Bus is under maintenance',
-                'occupiedSeats': []
+                'occupiedSeats': [],
+                'lockedSeats': [],
+                'userLockedSeats': []
             }), 400
         
-        # Get occupied seats
+        # Get occupied seats (confirmed bookings)
         if is_valid_objectid(schedule_id):
             query = {'schedule_id': ObjectId(schedule_id)}
         else:
@@ -285,7 +307,7 @@ def get_occupied_seats(schedule_id):
         
         bookings_cursor = db.bookings.find({
             **query,
-            'status': {'$in': ['confirmed', 'checked_in', 'pending', 'completed']}
+            'status': {'$in': ['confirmed', 'checked_in', 'completed']}
         })
         
         occupied_seats = []
@@ -298,13 +320,32 @@ def get_occupied_seats(schedule_id):
                 occupied_seats.extend(seat_list)
         
         occupied_seats = list(set(occupied_seats))
-        print(f"✅ Found {len(occupied_seats)} occupied seats from {booking_count} bookings")
+        
+        # Get all locked seats
+        all_locked_seats = get_locked_seats(schedule_id)
+        
+        # Get seats locked by current user (if authenticated)
+        user_locked_seats = []
+        other_locked_seats = all_locked_seats
+        
+        if current_user_id:
+            user_locked_seats = get_user_locked_seats(schedule_id, current_user_id)
+            other_locked_seats = [seat for seat in all_locked_seats if seat not in user_locked_seats]
+            print(f"👤 User {current_user_id} has {len(user_locked_seats)} locked seats: {user_locked_seats}")
+            print(f"🔒 Other users have {len(other_locked_seats)} locked seats: {other_locked_seats}")
+        else:
+            print(f"⚠️ No current_user_id, cannot separate user locks from others")
+        
+        print(f"✅ Found {len(occupied_seats)} occupied, {len(other_locked_seats)} locked by others, {len(user_locked_seats)} locked by user")
         
         return jsonify({
             'success': True,
             'occupiedSeats': occupied_seats,
+            'lockedSeats': other_locked_seats,  # Only seats locked by OTHER users
+            'userLockedSeats': user_locked_seats,  # Seats locked by THIS user
             'scheduleId': schedule_id,
             'totalOccupied': len(occupied_seats),
+            'totalLocked': len(all_locked_seats),
             'bookingCount': booking_count,
             'scheduleStatus': 'active',
             'busStatus': 'active'
@@ -315,7 +356,9 @@ def get_occupied_seats(schedule_id):
         return jsonify({
             'success': False,
             'error': str(e),
-            'occupiedSeats': []
+            'occupiedSeats': [],
+            'lockedSeats': [],
+            'userLockedSeats': []
         }), 500
 
 # Enhanced schedule validation endpoint
@@ -510,13 +553,26 @@ def create_booking():
         if not route:
             return jsonify({'error': 'Route not found'}), 404
         
-        # Check seat availability
+        # Check seat availability and locks
+        from app.utils.seat_lock import get_locked_seats, confirm_seat_locks
+        
         occupied_seats = get_occupied_seats_for_schedule(data['schedule_id'])
+        locked_seats = get_locked_seats(data['schedule_id'])
         requested_seats = data['seat_numbers']
         
+        # Check if seats are occupied
         for seat in requested_seats:
             if seat in occupied_seats:
                 return jsonify({'error': f'Seat {seat} is already occupied'}), 400
+        
+        # Check if seats are locked by another user
+        for seat in requested_seats:
+            if seat in locked_seats:
+                # Check if it's locked by this user
+                from app.utils.seat_lock import get_user_locked_seats
+                user_locks = get_user_locked_seats(data['schedule_id'], current_user_id)
+                if seat not in user_locks:
+                    return jsonify({'error': f'Seat {seat} is currently being selected by another user. Please choose a different seat.'}), 400
         
         # Handle baggage
         has_baggage = data.get('has_baggage', False)
@@ -678,6 +734,10 @@ def create_booking():
         result = db.bookings.insert_one(booking)
         booking_id = str(result.inserted_id)
         
+        # Confirm seat locks (mark as confirmed, not just locked)
+        confirm_seat_locks(data['schedule_id'], requested_seats, current_user_id)
+        print(f"✅ Seat locks confirmed for booking {booking_id}")
+        
         # Create payment record in payments collection
         try:
             payment_record = {
@@ -761,6 +821,13 @@ def create_booking():
             print(f"⚠️ Error updating user booking count: {str(loyalty_error)}")
         
         print(f"✅ Booking created successfully. ID: {booking_id}, Status: {booking_status}, Seats: {num_seats}, Passengers: {len(passengers_list)}")
+        
+        # Broadcast seat booking via WebSocket
+        try:
+            from app.socket_events import broadcast_seat_booked
+            broadcast_seat_booked(data['schedule_id'], requested_seats)
+        except Exception as ws_error:
+            print(f"⚠️ Failed to broadcast seat booking via WebSocket: {ws_error}")
         
         return jsonify({
             'message': 'Booking created successfully',

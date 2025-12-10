@@ -28,7 +28,7 @@ const RegisterForm = () => {
     setLoading(true);
     try {
       console.log('📝 Customer registration attempt:', data.email);
-      
+
       // Customer data only - no role selection
       const userData = {
         name: data.name,
@@ -37,16 +37,16 @@ const RegisterForm = () => {
         phone: data.phone,
         birthday: data.birthday
       };
-      
+
       console.log('📤 Customer data being sent to backend:', userData);
-      
+
       const result = await registerUser(userData);
-      
+
       if (result.success) {
         toast.success('Account created successfully! Please login to continue.');
-        navigate('/login', { 
+        navigate('/login', {
           replace: true,
-          state: { 
+          state: {
             message: 'Registration successful! Please sign in to your account.',
             registeredEmail: data.email
           }
@@ -76,24 +76,16 @@ const RegisterForm = () => {
         <div className="text-center mb-8">
           <h2 className="text-3xl font-bold text-gray-900">Create Customer Account</h2>
           <p className="text-gray-600 mt-2">Join EthioBus as a customer</p>
-          
+
           {/* Information Box */}
           <div className="mt-4 space-y-3">
             <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-700">
-                <strong>Note:</strong> Only customer accounts can be created here. 
+                <strong>Note:</strong> Only customer accounts can be created here.
                 Driver, ticketer, operator, and admin accounts require administrative approval.
               </p>
             </div>
-            <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg">
-              <p className="text-sm text-purple-700 flex items-center gap-2">
-                <span className="text-lg">🎁</span>
-                <span>
-                  <strong>Loyalty Rewards:</strong> Join our loyalty program and earn points with every booking! 
-                  Add your birthday to receive special bonus points on your special day.
-                </span>
-              </p>
-            </div>
+
           </div>
         </div>
 
@@ -108,9 +100,8 @@ const RegisterForm = () => {
               <input
                 id="name"
                 type="text"
-                className={`w-full px-3 py-3 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
-                  errors.name ? 'border-red-500 bg-red-50' : 'hover:border-gray-400'
-                }`}
+                className={`w-full px-3 py-3 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${errors.name ? 'border-red-500 bg-red-50' : 'hover:border-gray-400'
+                  }`}
                 placeholder="Enter your full name"
                 {...register('name', {
                   required: 'Full name is required',
@@ -139,9 +130,8 @@ const RegisterForm = () => {
               <input
                 id="email"
                 type="email"
-                className={`w-full px-3 py-3 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
-                  errors.email ? 'border-red-500 bg-red-50' : 'hover:border-gray-400'
-                }`}
+                className={`w-full px-3 py-3 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${errors.email ? 'border-red-500 bg-red-50' : 'hover:border-gray-400'
+                  }`}
                 placeholder="Enter your email"
                 {...register('email', {
                   required: 'Email is required',
@@ -171,9 +161,8 @@ const RegisterForm = () => {
               <input
                 id="phone"
                 type="tel"
-                className={`w-full px-3 py-3 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
-                  errors.phone ? 'border-red-500 bg-red-50' : 'hover:border-gray-400'
-                }`}
+                className={`w-full px-3 py-3 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${errors.phone ? 'border-red-500 bg-red-50' : 'hover:border-gray-400'
+                  }`}
                 placeholder="+251 911 223 344"
                 {...register('phone', {
                   required: 'Phone number is required',
@@ -204,9 +193,8 @@ const RegisterForm = () => {
                 id="birthday"
                 type="date"
                 max={new Date(new Date().setFullYear(new Date().getFullYear() - 13)).toISOString().split('T')[0]}
-                className={`w-full px-3 py-3 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
-                  errors.birthday ? 'border-red-500 bg-red-50' : 'hover:border-gray-400'
-                }`}
+                className={`w-full px-3 py-3 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${errors.birthday ? 'border-red-500 bg-red-50' : 'hover:border-gray-400'
+                  }`}
                 {...register('birthday', {
                   validate: value => {
                     if (!value) return true; // Optional field
@@ -214,7 +202,7 @@ const RegisterForm = () => {
                     const today = new Date();
                     const age = today.getFullYear() - birthDate.getFullYear();
                     const monthDiff = today.getMonth() - birthDate.getMonth();
-                    
+
                     if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
                       return age - 1 >= 13 || 'You must be at least 13 years old';
                     }
@@ -245,9 +233,8 @@ const RegisterForm = () => {
               <input
                 id="password"
                 type={showPassword ? 'text' : 'password'}
-                className={`w-full px-3 py-3 pl-10 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
-                  errors.password ? 'border-red-500 bg-red-50' : 'hover:border-gray-400'
-                }`}
+                className={`w-full px-3 py-3 pl-10 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${errors.password ? 'border-red-500 bg-red-50' : 'hover:border-gray-400'
+                  }`}
                 placeholder="Create a password (min. 6 characters)"
                 {...register('password', {
                   required: 'Password is required',
@@ -287,9 +274,8 @@ const RegisterForm = () => {
               <input
                 id="confirmPassword"
                 type={showConfirmPassword ? 'text' : 'password'}
-                className={`w-full px-3 py-3 pl-10 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
-                  errors.confirmPassword ? 'border-red-500 bg-red-50' : 'hover:border-gray-400'
-                }`}
+                className={`w-full px-3 py-3 pl-10 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${errors.confirmPassword ? 'border-red-500 bg-red-50' : 'hover:border-gray-400'
+                  }`}
                 placeholder="Confirm your password"
                 {...register('confirmPassword', {
                   required: 'Please confirm your password',
@@ -339,8 +325,8 @@ const RegisterForm = () => {
           <div className="text-center pt-4 border-t border-gray-200">
             <p className="text-gray-600">
               Already have an account?{' '}
-              <Link 
-                to="/login" 
+              <Link
+                to="/login"
                 className="text-blue-600 hover:text-blue-700 font-semibold transition-colors focus:outline-none focus:underline"
               >
                 Sign in here

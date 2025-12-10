@@ -3,6 +3,7 @@ from flask_pymongo import PyMongo
 from flask_bcrypt import Bcrypt
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
+from flask_socketio import SocketIO
 import os
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -14,6 +15,7 @@ load_dotenv()
 mongo = PyMongo()
 bcrypt = Bcrypt()
 jwt = JWTManager()
+socketio = SocketIO()
 
 def create_app():
     """Create and configure the Flask application"""
@@ -79,7 +81,20 @@ def create_app():
         mongo.init_app(app)
         bcrypt.init_app(app)
         jwt.init_app(app)
-        print("✅ Extensions initialized successfully")
+        
+        # Initialize SocketIO with CORS support
+        socketio.init_app(app, 
+                         cors_allowed_origins=[
+                             "http://localhost:3000",
+                             "http://127.0.0.1:3000",
+                             "http://localhost:5173",
+                             "http://127.0.0.1:5173"
+                         ],
+                         async_mode='threading',
+                         logger=True,
+                         engineio_logger=True)
+        
+        print("✅ Extensions initialized successfully (including SocketIO)")
     except Exception as e:
         print(f"❌ Failed to initialize extensions: {e}")
         raise
@@ -249,6 +264,18 @@ def create_app():
             "error": "Authorization required",
             "message": "Request does not contain an access token"
         }), 401
+    
+    # =========================================================================
+    # SOCKET.IO EVENT HANDLERS
+    # =========================================================================
+    
+    # Import socket events after app is configured
+    with app.app_context():
+        try:
+            from app import socket_events
+            print("✅ Socket.IO event handlers loaded")
+        except Exception as e:
+            print(f"⚠️ Failed to load socket events: {e}")
     
     print(f"✅ EthioBus Flask application configured successfully!")
     print(f"📍 Environment: {os.getenv('FLASK_ENV', 'production')}")

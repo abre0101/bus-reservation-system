@@ -139,10 +139,9 @@ const ScheduleCard = ({
       destinationCity: schedule.destination_city || schedule.destinationCity,
       
       // Date and time - support both formats
-      departure_date: schedule.departure_date || schedule.departure_date,
+      departure_date: schedule.departure_date || schedule.departureDate,
       departure_time: schedule.departure_time || schedule.departureTime,
       arrival_time: schedule.arrival_time || schedule.arrivalTime,
-      departure_date: schedule.departure_date || schedule.departure_date,
       departureTime: schedule.departure_time || schedule.departureTime,
       arrivalTime: schedule.arrival_time || schedule.arrivalTime,
       

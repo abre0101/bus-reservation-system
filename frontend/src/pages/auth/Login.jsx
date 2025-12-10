@@ -56,7 +56,7 @@ const Login = () => {
                   <div className="text-gray-600 text-sm font-medium">Happy Travelers</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl md:text-3xl font-black bg-gradient-to-r from-blue-600 to-indigo-700 bg-clip-text text-transparent">100+</div>
+                  <div className="text-2xl md:text-3xl font-black bg-gradient-to-r from-blue-600 to-indigo-700 bg-clip-text text-transparent">6+</div>
                   <div className="text-gray-600 text-sm font-medium">Routes</div>
                 </div>
                 <div className="text-center">

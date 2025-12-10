@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { generateSeatLayout } from '../../utils/helpers'
 import { bookingService } from '../../services/bookingService'
+import socketService from '../../services/socketService'
 import LoadingSpinner from '../common/LoadingSpinner'
 import Button from '../common/Button'
 import BookingProgress from './BookingProgress'
@@ -23,11 +24,13 @@ const SeatSelection = () => {
   
   const [seats, setSeats] = useState([])
   const [occupiedSeats, setOccupiedSeats] = useState([])
+  const [lockedSeats, setLockedSeats] = useState([])
   const [selectedSeats, setSelectedSeats] = useState(previouslySelectedSeats)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [retryCount, setRetryCount] = useState(0)
   const [lastUpdated, setLastUpdated] = useState(null)
+  const [socketConnected, setSocketConnected] = useState(false)
 
   // Get passenger count from booking data or default to 1
   const passengerCount = bookingData?.passengers || 1
@@ -56,7 +59,38 @@ const SeatSelection = () => {
       }
       
       const occupied = response.occupiedSeats || []
+      const locked = response.lockedSeats || []
+      
+      // Get current user ID to check if any locked seats belong to them
+      const userStr = sessionStorage.getItem('user') || localStorage.getItem('user') || '{}'
+      const user = JSON.parse(userStr)
+      const currentUserId = user._id || user.id || user.userId
+      
       setOccupiedSeats(occupied)
+      
+      // Filter locked seats - don't show user's own locks as "locked"
+      // Instead, restore them as selected seats
+      console.log('🔍 Current user ID:', currentUserId)
+      console.log('🔍 User locked seats from backend:', response.userLockedSeats)
+      console.log('🔍 All locked seats from backend:', locked)
+      
+      if (currentUserId && response.userLockedSeats && response.userLockedSeats.length > 0) {
+        // If backend provides user's locked seats separately
+        const userLocks = response.userLockedSeats || []
+        const otherLocks = locked.filter(seat => !userLocks.includes(seat))
+        
+        setLockedSeats(otherLocks)
+        setSelectedSeats(userLocks) // Restore user's previous selection
+        console.log('✅ Restored your previously selected seats:', userLocks)
+        console.log('🔒 Other users locked seats:', otherLocks)
+      } else {
+        // Fallback: treat all locks as from other users
+        console.log('⚠️ No userLockedSeats found, treating all as other users')
+        console.log('⚠️ CurrentUserId:', currentUserId)
+        console.log('⚠️ userLockedSeats:', response.userLockedSeats)
+        setLockedSeats(locked)
+      }
+      
       setLastUpdated(new Date())
       
       // Generate realistic bus layout with 2+2 seating
@@ -64,7 +98,7 @@ const SeatSelection = () => {
       const seatLayout = generateRealisticBusLayout(totalSeats, occupied)
       setSeats(seatLayout)
 
-      // Clear any selected seats that are now occupied
+      // Clear any selected seats that are now occupied (but not locked by this user)
       setSelectedSeats(prev => prev.filter(seat => !occupied.includes(seat)))
       
     } catch (err) {
@@ -135,14 +169,69 @@ const SeatSelection = () => {
       return
     }
 
+    // Get user ID from sessionStorage (where auth stores it)
+    const userStr = sessionStorage.getItem('user') || localStorage.getItem('user') || '{}'
+    const user = JSON.parse(userStr)
+    const userId = user._id || user.id || user.userId
+    
+    console.log('👤 User data from storage:', user)
+    console.log('👤 Extracted userId:', userId)
+
+    if (!userId) {
+      console.error('❌ No user ID found in storage')
+      setError('User not authenticated. Please login again.')
+      setLoading(false)
+      return
+    }
+
+    // Load initial seat data
     loadOccupiedSeats()
 
-    // Refresh occupied seats every 30 seconds to prevent double booking
-    const interval = setInterval(() => {
-      loadOccupiedSeats()
-    }, 30000)
+    // Connect to WebSocket
+    socketService.connect()
+    setSocketConnected(true)
 
-    return () => clearInterval(interval)
+    // Join schedule room
+    socketService.joinSchedule(scheduleId, userId)
+
+    // Listen for real-time seat updates
+    socketService.onSeatStatusUpdate((data) => {
+      console.log('📊 Real-time seat status update:', data)
+      setOccupiedSeats(data.occupied_seats || [])
+      setLockedSeats(data.locked_seats || [])
+      setLastUpdated(new Date())
+    })
+
+    socketService.onSeatsLocked((data) => {
+      console.log('🔒 Seats locked by another user:', data)
+      if (data.user_id !== userId) {
+        // Another user locked seats - add to locked list
+        setLockedSeats(prev => [...new Set([...prev, ...data.seat_numbers])])
+        // Remove from selected if user had selected them
+        setSelectedSeats(prev => prev.filter(seat => !data.seat_numbers.includes(seat)))
+      } else {
+        // This user locked seats - add to selected list
+        console.log('✅ Your seats locked successfully:', data.seat_numbers)
+        setSelectedSeats(prev => [...new Set([...prev, ...data.seat_numbers])])
+      }
+    })
+
+    socketService.onSeatsUnlocked((data) => {
+      console.log('🔓 Seats unlocked:', data)
+      setLockedSeats(prev => prev.filter(seat => !data.seat_numbers.includes(seat)))
+    })
+
+    socketService.onSeatsBooked((data) => {
+      console.log('✅ Seats booked:', data)
+      setOccupiedSeats(prev => [...new Set([...prev, ...data.seat_numbers])])
+      setLockedSeats(prev => prev.filter(seat => !data.seat_numbers.includes(seat)))
+    })
+
+    // Cleanup on unmount
+    return () => {
+      socketService.leaveSchedule(scheduleId)
+      socketService.removeAllListeners()
+    }
   }, [scheduleId, loadOccupiedSeats])
 
   // Save selected seats to sessionStorage whenever they change
@@ -153,22 +242,60 @@ const SeatSelection = () => {
     }
   }, [selectedSeats])
 
-  const handleSeatClick = (seatNumber) => {
+  const handleSeatClick = async (seatNumber) => {
+    // Get user ID from sessionStorage (where auth stores it)
+    const userStr = sessionStorage.getItem('user') || localStorage.getItem('user') || '{}'
+    const user = JSON.parse(userStr)
+    const userId = user._id || user.id || user.userId
+    
+    console.log('🎯 handleSeatClick - User:', user)
+    console.log('🎯 handleSeatClick - userId:', userId)
+
+    if (!userId) {
+      alert('User not authenticated. Please login again.')
+      return
+    }
+
     // Prevent selecting occupied seats
     if (occupiedSeats.includes(seatNumber)) {
       alert(`Seat ${seatNumber} is already occupied. Please select another seat.`)
       return
     }
+
+    // Check if this seat is locked by another user
+    if (lockedSeats.includes(seatNumber)) {
+      alert(`Seat ${seatNumber} is currently being selected by another user. Please choose a different seat.`)
+      return
+    }
+    
+    // If seat is in selectedSeats, allow deselection (even if it's locked in DB)
+    // This handles the case where user's own lock wasn't properly restored
     
     // Dynamic seat selection based on passenger count
     if (selectedSeats.includes(seatNumber)) {
-      setSelectedSeats(prev => prev.filter(seat => seat !== seatNumber))
+      // Deselect seat - unlock it
+      try {
+        await socketService.unlockSeats(scheduleId, [seatNumber], userId)
+        setSelectedSeats(prev => prev.filter(seat => seat !== seatNumber))
+      } catch (error) {
+        console.error('Failed to unlock seat:', error)
+        // Still allow deselection locally
+        setSelectedSeats(prev => prev.filter(seat => seat !== seatNumber))
+      }
     } else {
       if (selectedSeats.length >= passengerCount) {
         alert(`You can select maximum ${passengerCount} seat${passengerCount !== 1 ? 's' : ''} for ${passengerCount} passenger${passengerCount !== 1 ? 's' : ''}`)
         return
       }
-      setSelectedSeats(prev => [...prev, seatNumber])
+
+      // Try to lock the seat
+      try {
+        await socketService.lockSeats(scheduleId, [seatNumber], userId)
+        setSelectedSeats(prev => [...prev, seatNumber])
+      } catch (error) {
+        console.error('Failed to lock seat:', error)
+        alert(error.message || 'Failed to select seat. It may have been taken by another user.')
+      }
     }
   }
 
@@ -177,6 +304,9 @@ const SeatSelection = () => {
     
     if (occupiedSeats.includes(seatNumber)) {
       return `${baseClasses} bg-gradient-to-br from-red-100 to-red-200 cursor-not-allowed text-red-700 border-red-400 opacity-60`
+    }
+    if (lockedSeats.includes(seatNumber) && !selectedSeats.includes(seatNumber)) {
+      return `${baseClasses} bg-gradient-to-br from-yellow-100 to-orange-200 cursor-not-allowed text-orange-700 border-orange-400 opacity-70`
     }
     if (selectedSeats.includes(seatNumber)) {
       return `${baseClasses} bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-blue-600 shadow-xl transform scale-110 ring-4 ring-blue-200`
@@ -241,7 +371,27 @@ const SeatSelection = () => {
     })
   }
 
-  const handleClearSelection = () => {
+  const handleClearSelection = async () => {
+    // Get user ID from sessionStorage (where auth stores it)
+    const userStr = sessionStorage.getItem('user') || localStorage.getItem('user') || '{}'
+    const user = JSON.parse(userStr)
+    const userId = user._id || user.id || user.userId
+
+    if (!userId) {
+      console.warn('⚠️ No userId found, clearing selection locally only')
+      setSelectedSeats([])
+      return
+    }
+
+    // Unlock all selected seats
+    if (selectedSeats.length > 0) {
+      try {
+        await socketService.unlockSeats(scheduleId, selectedSeats, userId)
+      } catch (error) {
+        console.error('Failed to unlock seats:', error)
+      }
+    }
+
     setSelectedSeats([])
   }
 
@@ -251,6 +401,10 @@ const SeatSelection = () => {
   }
 
   const handleRefreshSeats = async () => {
+    // Request refresh via WebSocket
+    socketService.refreshSeats(scheduleId)
+    
+    // Also reload from API
     await loadOccupiedSeats()
     alert('Seat availability has been refreshed!')
   }
@@ -378,11 +532,21 @@ const SeatSelection = () => {
             Choose seats for <span className="font-bold text-blue-600">{passengerCount}</span> passenger{passengerCount !== 1 ? 's' : ''}
           </p>
           
-          {/* Last Updated Info */}
-          <div className="mt-4 flex items-center justify-center space-x-4 text-sm">
+          {/* Last Updated Info & Connection Status */}
+          <div className="mt-4 flex items-center justify-center space-x-4 text-sm flex-wrap gap-2">
             <div className="flex items-center space-x-2 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-full border border-gray-200 shadow-sm">
               <Clock className="h-4 w-4 text-blue-600" />
               <span className="text-gray-700">Last updated: <span className="font-semibold">{lastUpdated ? lastUpdated.toLocaleTimeString() : 'Loading...'}</span></span>
+            </div>
+            <div className={`flex items-center space-x-2 px-4 py-2 rounded-full border shadow-sm ${
+              socketConnected 
+                ? 'bg-green-50 border-green-200' 
+                : 'bg-red-50 border-red-200'
+            }`}>
+              <div className={`w-2 h-2 rounded-full ${socketConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+              <span className={`font-semibold ${socketConnected ? 'text-green-700' : 'text-red-700'}`}>
+                {socketConnected ? 'Live Updates' : 'Disconnected'}
+              </span>
             </div>
             <button 
               onClick={handleRefreshSeats}
@@ -582,7 +746,7 @@ const SeatSelection = () => {
                   </div>
                   Seat Status Guide
                 </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="flex items-center space-x-3 p-4 bg-white rounded-xl border-2 border-green-300 shadow-sm hover:shadow-md transition-all">
                     <div className="w-12 h-12 bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-400 rounded-xl flex items-center justify-center shadow-sm">
                       <span className="text-sm font-bold text-gray-800">1</span>
@@ -599,6 +763,15 @@ const SeatSelection = () => {
                     <div>
                       <div className="font-bold text-gray-900">Selected</div>
                       <div className="text-sm text-gray-600">Your choice</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-3 p-4 bg-white rounded-xl border-2 border-orange-300 shadow-sm hover:shadow-md transition-all">
+                    <div className="w-12 h-12 bg-gradient-to-br from-yellow-100 to-orange-200 border-2 border-orange-400 rounded-xl flex items-center justify-center shadow-sm opacity-70">
+                      <Clock className="h-5 w-5 text-orange-700" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-gray-900">Locked</div>
+                      <div className="text-sm text-gray-600">Being selected</div>
                     </div>
                   </div>
                   <div className="flex items-center space-x-3 p-4 bg-white rounded-xl border-2 border-red-300 shadow-sm hover:shadow-md transition-all">
@@ -711,7 +884,11 @@ const SeatSelection = () => {
                 </li>
                 <li className="flex items-start space-x-3">
                   <div className="w-2 h-2 bg-white rounded-full mt-2 flex-shrink-0"></div>
-                  <span>Seat availability updates automatically</span>
+                  <span>Seat availability updates in real-time</span>
+                </li>
+                <li className="flex items-start space-x-3">
+                  <div className="w-2 h-2 bg-white rounded-full mt-2 flex-shrink-0"></div>
+                  <span>Locked seats are being selected by others</span>
                 </li>
                 <li className="flex items-start space-x-3">
                   <div className="w-2 h-2 bg-white rounded-full mt-2 flex-shrink-0"></div>
