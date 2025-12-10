@@ -1,0 +1,31 @@
+{
+  "version": 2,
+  "name": "ethiobus-frontend",
+  "builds": [
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/frontend/$1"
+    }
+  ],
+  "env": {
+    "VITE_API_URL": "@vite_api_url",
+    "VITE_CHAPA_PUBLIC_KEY": "@vite_chapa_public_key",
+    "VITE_STRIPE_PUBLIC_KEY": "@vite_stripe_public_key"
+  },
+  "build": {
+    "env": {
+      "VITE_API_URL": "@vite_api_url",
+      "VITE_CHAPA_PUBLIC_KEY": "@vite_chapa_public_key",
+      "VITE_STRIPE_PUBLIC_KEY": "@vite_stripe_public_key"
+    }
+  }
+}

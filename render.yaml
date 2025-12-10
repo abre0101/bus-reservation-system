@@ -1,0 +1,79 @@
+# Render Blueprint for EthioBus
+# This file enables one-click deployment to Render
+
+services:
+  # Backend API with WebSocket support
+  - type: web
+    name: ethiobus-backend
+    env: python
+    region: frankfurt  # Change to your preferred region
+    plan: free  # Change to 'starter' for production ($7/month)
+    branch: main
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python run.py
+    healthCheckPath: /
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: MONGO_URI
+        sync: false  # Set manually in Render dashboard
+      - key: PORT
+        value: 5000
+      - key: DEBUG
+        value: False
+      - key: CHAPA_SECRET_KEY
+        sync: false
+      - key: CHAPA_PUBLIC_KEY
+        sync: false
+      - key: CHAPA_BASE_URL
+        value: https://api.chapa.co/v1
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PUBLIC_KEY
+        sync: false
+
+  # Frontend Static Site
+  - type: web
+    name: ethiobus-frontend
+    env: static
+    region: frankfurt
+    plan: free
+    branch: main
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    pullRequestPreviewsEnabled: true
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: ethiobus-backend
+          property: host
+      - key: VITE_CHAPA_PUBLIC_KEY
+        sync: false
+      - key: VITE_STRIPE_PUBLIC_KEY
+        sync: false
+
+  # Background Worker for Seat Lock Cleanup
+  - type: worker
+    name: ethiobus-cleanup-worker
+    env: python
+    region: frankfurt
+    plan: free
+    branch: main
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app.utils.cleanup_locks
+    envVars:
+      - key: MONGO_URI
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+
+databases:
+  # Note: Render doesn't provide MongoDB
+  # Use MongoDB Atlas (free tier available)
+  # Connection string should be added as MONGO_URI env var

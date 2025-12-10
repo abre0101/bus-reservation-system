@@ -1,0 +1,3 @@
+# Procfile for Heroku/Railway deployment
+web: python run.py
+worker: python -m app.utils.cleanup_locks
