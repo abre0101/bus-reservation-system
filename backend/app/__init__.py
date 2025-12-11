@@ -49,21 +49,24 @@ def create_app():
     # CORS CONFIGURATION - SINGLE SOURCE OF TRUTH
     # =========================================================================
     
-    # Get allowed origins from environment variable or use defaults
-    cors_origins = os.getenv('CORS_ORIGINS', '').split(',') if os.getenv('CORS_ORIGINS') else []
+    # Get allowed origins from environment variable
+    cors_origins_env = os.getenv('CORS_ORIGINS', '')
     
-    # Default origins for development
-    default_origins = [
-        "http://localhost:3000", 
-        "http://127.0.0.1:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:8080",
-        "http://127.0.0.1:8080"
-    ]
+    if cors_origins_env:
+        # Production: use only specified origins
+        all_origins = [origin.strip() for origin in cors_origins_env.split(',') if origin.strip()]
+    else:
+        # Development: use localhost origins
+        all_origins = [
+            "http://localhost:3000", 
+            "http://127.0.0.1:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:8080",
+            "http://127.0.0.1:8080"
+        ]
     
-    # Combine and filter empty strings
-    all_origins = [origin.strip() for origin in (cors_origins + default_origins) if origin.strip()]
+    print(f"🌐 CORS allowed origins: {all_origins}")
     
     CORS(app, 
          origins=all_origins,
