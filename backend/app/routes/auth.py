@@ -11,22 +11,33 @@ def register():
     try:
         data = request.get_json()
         print(f"📝 Registration attempt for: {data.get('email')}")
+        print(f"📊 Registration data received: {list(data.keys())}")
 
         # Validate required fields
         required_fields = ['name', 'email', 'password']
         for field in required_fields:
             if not data.get(field):
+                print(f"❌ Missing required field: {field}")
                 return jsonify({'message': f'{field} is required'}), 400
 
+        print("✅ All required fields present")
+
         # Check if user already exists
+        print(f"🔍 Checking if user exists: {data['email']}")
         existing_user = mongo.db.users.find_one({'email': data['email']})
         if existing_user:
+            print(f"❌ User already exists: {data['email']}")
             return jsonify({'message': 'User with this email already exists'}), 400
 
+        print("✅ User doesn't exist, proceeding with registration")
+
         # Hash password
+        print("🔐 Hashing password...")
         hashed_password = bcrypt.generate_password_hash(data['password']).decode('utf-8')
+        print("✅ Password hashed successfully")
 
         # Create user document with ALL required fields
+        print("📝 Creating user document...")
         user = {
             'name': data['name'],
             'email': data['email'],
@@ -41,12 +52,16 @@ def register():
             'created_at': datetime.utcnow(),
             'updated_at': datetime.utcnow()
         }
+        print("✅ User document created")
 
         # Insert user
+        print("💾 Inserting user into database...")
         result = mongo.db.users.insert_one(user)
         user_id = str(result.inserted_id)
+        print(f"✅ User inserted with ID: {user_id}")
 
         # Create access token
+        print("🎫 Creating access token...")
         access_token = create_access_token(
             identity=user_id,
             additional_claims={
@@ -54,6 +69,7 @@ def register():
                 'role': user['role']
             }
         )
+        print("✅ Access token created")
 
         print(f"✅ Customer registered successfully: {user['email']}")
 
@@ -74,7 +90,10 @@ def register():
         }), 201
 
     except Exception as e:
+        import traceback
         print(f"❌ Registration error: {str(e)}")
+        print(f"❌ Full traceback:")
+        traceback.print_exc()
         return jsonify({'message': 'Registration failed', 'error': str(e)}), 500
 
 
