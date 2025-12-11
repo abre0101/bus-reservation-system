@@ -49,15 +49,24 @@ def create_app():
     # CORS CONFIGURATION - SINGLE SOURCE OF TRUTH
     # =========================================================================
     
+    # Get allowed origins from environment variable or use defaults
+    cors_origins = os.getenv('CORS_ORIGINS', '').split(',') if os.getenv('CORS_ORIGINS') else []
+    
+    # Default origins for development
+    default_origins = [
+        "http://localhost:3000", 
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080"
+    ]
+    
+    # Combine and filter empty strings
+    all_origins = [origin.strip() for origin in (cors_origins + default_origins) if origin.strip()]
+    
     CORS(app, 
-         origins=[
-             "http://localhost:3000", 
-             "http://127.0.0.1:3000",
-             "http://localhost:5173",
-             "http://127.0.0.1:5173",
-             "http://localhost:8080",
-             "http://127.0.0.1:8080"
-         ],
+         origins=all_origins,
          supports_credentials=True,
          allow_headers=[
              "Content-Type", 
@@ -78,18 +87,23 @@ def create_app():
     # =========================================================================
     
     try:
+        print(f"🔌 Connecting to MongoDB...")
+        print(f"📍 MONGO_URI: {app.config['MONGO_URI'][:50]}...")  # Print first 50 chars only
+        
         mongo.init_app(app)
         bcrypt.init_app(app)
         jwt.init_app(app)
         
+        # Test MongoDB connection
+        try:
+            mongo.cx.admin.command('ping')
+            print("✅ MongoDB connected successfully!")
+        except Exception as db_error:
+            print(f"⚠️ MongoDB connection warning: {db_error}")
+        
         # Initialize SocketIO with CORS support
         socketio.init_app(app, 
-                         cors_allowed_origins=[
-                             "http://localhost:3000",
-                             "http://127.0.0.1:3000",
-                             "http://localhost:5173",
-                             "http://127.0.0.1:5173"
-                         ],
+                         cors_allowed_origins=all_origins,
                          async_mode='threading',
                          logger=True,
                          engineio_logger=True)
@@ -195,40 +209,78 @@ def create_app():
     @app.route('/')
     def health_check():
         """Comprehensive health check endpoint"""
+        db_status = 'disconnected'
+        db_name = 'unknown'
+        collections_count = 0
+        db_error_msg = None
+        
         try:
-            # Test database connection
-            db_status = 'connected' if mongo.cx else 'disconnected'
-            db_name = mongo.cx.db.name if mongo.cx else 'unknown'
-            
-            # Test collections existence
-            collections = mongo.db.list_collection_names() if mongo.cx else []
-            
-            return jsonify({
-                'status': 'healthy',
-                'service': 'EthioBus API',
-                'version': '1.0.0',
-                'timestamp': datetime.utcnow().isoformat(),
-                'database': {
-                    'status': db_status,
-                    'name': db_name,
-                    'collections_count': len(collections)
-                },
-                'features': {
-                    'authentication': True,
-                    'payments': bool(app.config['CHAPA_SECRET_KEY']),
-                    'admin_panel': True,
-                    'booking_system': True,
-                    'ticketer_system': True  # NEW: Added ticketer system feature
-                },
-                'endpoints_available': registered_count
-            }), 200
-            
-        except Exception as e:
-            return jsonify({
-                'status': 'degraded',
-                'error': str(e),
-                'timestamp': datetime.utcnow().isoformat()
-            }), 500
+            if mongo.cx:
+                # Ping database to verify connection
+                mongo.cx.admin.command('ping')
+                db_status = 'connected'
+                db_name = mongo.db.name
+                collections_count = len(mongo.db.list_collection_names())
+        except Exception as db_error:
+            print(f"⚠️ Database connection check failed: {db_error}")
+            db_status = 'error'
+            db_error_msg = str(db_error)
+        
+        response = {
+            'status': 'healthy' if db_status == 'connected' else 'degraded',
+            'service': 'EthioBus API',
+            'version': '1.0.0',
+            'timestamp': datetime.utcnow().isoformat(),
+            'database': {
+                'status': db_status,
+                'name': db_name,
+                'collections_count': collections_count
+            },
+            'features': {
+                'authentication': True,
+                'payments': bool(app.config.get('CHAPA_SECRET_KEY')),
+                'admin_panel': True,
+                'booking_system': True,
+                'ticketer_system': True
+            },
+            'endpoints_available': registered_count
+        }
+        
+        if db_error_msg:
+            response['database']['error'] = db_error_msg
+        
+        return jsonify(response), 200
+    
+    @app.route('/debug/config')
+    def debug_config():
+        """Debug endpoint to check configuration (remove in production)"""
+        mongo_uri = app.config.get('MONGO_URI', 'NOT SET')
+        # Mask password in URI
+        if '@' in mongo_uri:
+            parts = mongo_uri.split('@')
+            if '://' in parts[0]:
+                protocol_user = parts[0].split('://')
+                if ':' in protocol_user[1]:
+                    user = protocol_user[1].split(':')[0]
+                    masked = f"{protocol_user[0]}://{user}:****@{parts[1]}"
+                else:
+                    masked = mongo_uri
+            else:
+                masked = mongo_uri
+        else:
+            masked = mongo_uri
+        
+        return jsonify({
+            'mongo_uri_set': bool(os.getenv('MONGO_URI')),
+            'mongo_uri_masked': masked,
+            'mongo_cx_exists': mongo.cx is not None,
+            'cors_origins': all_origins,
+            'environment_vars': {
+                'SECRET_KEY': 'SET' if os.getenv('SECRET_KEY') else 'NOT SET',
+                'JWT_SECRET_KEY': 'SET' if os.getenv('JWT_SECRET_KEY') else 'NOT SET',
+                'CHAPA_SECRET_KEY': 'SET' if os.getenv('CHAPA_SECRET_KEY') else 'NOT SET',
+            }
+        }), 200
     
     # =========================================================================
     # JWT CONFIGURATION
