@@ -17,5 +17,15 @@ export default defineConfig({
     alias: {
       '@': '/src'
     }
-  }
+  },
+  build: {
+    outDir: 'dist',
+    // Copy _redirects file to dist folder
+    rollupOptions: {
+      output: {
+        manualChunks: undefined
+      }
+    }
+  },
+  publicDir: 'public'
 })
