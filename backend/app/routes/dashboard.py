@@ -162,11 +162,39 @@ def debug_user_bookings():
 def get_popular_routes():
     """Get popular routes with actual schedule fares"""
     try:
-        # Get upcoming schedules grouped by route
-        upcoming_schedules = list(mongo.db.busschedules.find({
-            'status': 'scheduled',
-            'departure_date': {'$gte': datetime.utcnow()}
-        }).limit(50))
+        print("🔍 Fetching popular routes from schedules...")
+        
+        # Get all scheduled schedules (don't filter by date yet, we'll do it in Python)
+        all_schedules = list(mongo.db.busschedules.find({
+            'status': 'scheduled'
+        }).limit(100))
+        
+        print(f"📊 Found {len(all_schedules)} total scheduled trips")
+        
+        # Filter for upcoming schedules (handle both datetime and string dates)
+        upcoming_schedules = []
+        current_date = datetime.utcnow()
+        
+        for schedule in all_schedules:
+            departure_date = schedule.get('departure_date')
+            if not departure_date:
+                continue
+                
+            # Convert string dates to datetime if needed
+            if isinstance(departure_date, str):
+                try:
+                    if 'T' in departure_date:
+                        departure_date = datetime.fromisoformat(departure_date.replace('Z', '+00:00'))
+                    else:
+                        departure_date = datetime.strptime(departure_date, '%Y-%m-%d')
+                except:
+                    continue
+            
+            # Only include future schedules
+            if departure_date >= current_date:
+                upcoming_schedules.append(schedule)
+        
+        print(f"📊 Found {len(upcoming_schedules)} upcoming scheduled trips")
         
         # Group schedules by route (origin + destination)
         routes_map = {}
