@@ -1025,6 +1025,13 @@ def create_entity(entity):
                 data['password'] = bcrypt.generate_password_hash(data['password']).decode('utf-8')
                 print(f"✅ Password hashed for new driver")
         
+        # Hash password for all user types (user, ticketer, operator, admin)
+        if entity in ['user', 'ticketer', 'operator', 'admin']:
+            if 'password' in data and data['password']:
+                from app import bcrypt
+                data['password'] = bcrypt.generate_password_hash(data['password']).decode('utf-8')
+                print(f"✅ Password hashed for new {entity}")
+        
         result = mongo.db[collection_name].insert_one(data)
         created_item = mongo.db[collection_name].find_one({'_id': result.inserted_id})
         
@@ -1123,12 +1130,12 @@ def update_entity(entity, item_id):
         
         data['updated_at'] = datetime.utcnow()
         
-        # Special handling for drivers - hash password if provided
-        if entity == 'driver':
+        # Hash password for all user types if provided
+        if entity in ['driver', 'user', 'ticketer', 'operator', 'admin']:
             if 'password' in data and data['password']:
                 from app import bcrypt
                 data['password'] = bcrypt.generate_password_hash(data['password']).decode('utf-8')
-                print(f"✅ Password hashed for driver update")
+                print(f"✅ Password hashed for {entity} update")
             else:
                 # Remove password field if empty (don't update it)
                 data.pop('password', None)
