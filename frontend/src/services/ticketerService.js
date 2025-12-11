@@ -1,8 +1,8 @@
 // services/ticketerService.js
 import axios from 'axios';
 
-// Direct URL configuration
-const API_BASE_URL = 'http://localhost:5000';
+// Use environment variable for API URL
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 // Request Controller for managing API request cancellation
 class RequestController {
