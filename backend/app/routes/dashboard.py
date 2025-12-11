@@ -160,39 +160,70 @@ def debug_user_bookings():
 
 @dashboard_bp.route('/routes', methods=['GET'])
 def get_popular_routes():
-    """Get popular Ethiopian routes"""
+    """Get popular routes with actual schedule fares"""
     try:
-        # Get routes with actual schedule count for better popularity calculation
-        popular_routes = list(mongo.db.routes.find({'is_active': True}).limit(10))
+        # Get upcoming schedules grouped by route
+        upcoming_schedules = list(mongo.db.busschedules.find({
+            'status': 'scheduled',
+            'departure_date': {'$gte': datetime.utcnow()}
+        }).limit(50))
         
+        # Group schedules by route (origin + destination)
+        routes_map = {}
+        for schedule in upcoming_schedules:
+            route_key = f"{schedule.get('origin_city', '')}_{schedule.get('destination_city', '')}"
+            
+            if route_key not in routes_map:
+                routes_map[route_key] = {
+                    'origin_city': schedule.get('origin_city', 'Unknown'),
+                    'destination_city': schedule.get('destination_city', 'Unknown'),
+                    'min_fare': schedule.get('fare_birr', 0),
+                    'max_fare': schedule.get('fare_birr', 0),
+                    'schedules': [],
+                    'bus_types': set()
+                }
+            
+            route_data = routes_map[route_key]
+            route_data['schedules'].append(schedule)
+            route_data['bus_types'].add(schedule.get('bus_type', 'standard'))
+            
+            # Update min/max fares
+            fare = schedule.get('fare_birr', 0)
+            if fare < route_data['min_fare']:
+                route_data['min_fare'] = fare
+            if fare > route_data['max_fare']:
+                route_data['max_fare'] = fare
+        
+        # Convert to list and add additional info
         routes_data = []
-        for route in popular_routes:
-            # Calculate actual popularity based on schedule count
-            schedule_count = mongo.db.busschedules.count_documents({
-                'routeId': str(route['_id']),
-                'status': 'scheduled',
-                'departure_date': {'$gte': datetime.utcnow()}
+        for route_key, route_info in routes_map.items():
+            # Get route details from routes collection if available
+            route_doc = mongo.db.routes.find_one({
+                'origin_city': route_info['origin_city'],
+                'destination_city': route_info['destination_city']
             })
             
-            # Calculate popularity score (0-100)
-            popularity_score = min(100, schedule_count * 10 + random.randint(10, 30))
-            
             route_data = {
-                '_id': str(route['_id']),
-                'origin_city': route.get('origin_city', 'Unknown'),
-                'destination_city': route.get('destination_city', 'Unknown'),
-                'distance_km': route.get('distance_km', 0),
-                'estimated_duration_hours': route.get('estimated_duration_hours', 0),
-                'base_fare_birr': route.get('base_fare_birr', 0),
-                'route_type': 'standard',
-                'popularity': popularity_score,
-                'schedule_count': schedule_count,
-                'image_url': get_route_image(route.get('origin_city'))
+                '_id': str(route_doc['_id']) if route_doc else route_key,
+                'origin_city': route_info['origin_city'],
+                'destination_city': route_info['destination_city'],
+                'distance_km': route_doc.get('distance_km', 0) if route_doc else 0,
+                'estimated_duration_hours': route_doc.get('estimated_duration_hours', 0) if route_doc else 0,
+                'fare_birr': route_info['min_fare'],  # Show minimum fare
+                'base_fare_birr': route_info['min_fare'],
+                'max_fare_birr': route_info['max_fare'],
+                'bus_type': list(route_info['bus_types'])[0] if route_info['bus_types'] else 'standard',
+                'schedule_count': len(route_info['schedules']),
+                'popularity': len(route_info['schedules']) * 10,
+                'image_url': get_route_image(route_info['origin_city'])
             }
             routes_data.append(route_data)
         
-        # Sort by popularity
-        routes_data.sort(key=lambda x: x['popularity'], reverse=True)
+        # Sort by popularity (schedule count)
+        routes_data.sort(key=lambda x: x['schedule_count'], reverse=True)
+        
+        # Limit to top 10
+        routes_data = routes_data[:10]
         
         return jsonify({
             'success': True,
@@ -202,6 +233,8 @@ def get_popular_routes():
         
     except Exception as e:
         print(f"❌ Error in get_popular_routes: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'success': False,
             'error': 'Failed to fetch routes data',
