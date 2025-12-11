@@ -17,7 +17,6 @@ const TicketerLayout = ({ children }) => {
     { path: '/ticketer/dashboard', icon: '📊', label: 'Dashboard' },
     { path: '/ticketer/quick-booking', icon: '⚡', label: 'Walk_in Booking' },
     { path: '/ticketer/booking-lookup', icon: '🔍', label: 'Booking Lookup' },
-    { path: '/ticketer/customer-management', icon: '👥', label: 'Customers' },
     { path: '/ticketer/point-of-sale', icon: '💳', label: 'Point of Sale' },
     { path: '/ticketer/schedule-browser', icon: '📅', label: 'Schedules' },
   ]
