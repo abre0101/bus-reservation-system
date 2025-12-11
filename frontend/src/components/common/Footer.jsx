@@ -23,7 +23,7 @@ const Footer = () => {
   ]
 
   const socialLinks = [
-    { icon: Facebook, href: '#', label: 'Facebook' },
+    { icon: Telegram, href: '#', label: 'Facebook' },
     { icon: Twitter, href: '#', label: 'Twitter' },
     { icon: Instagram, href: '#', label: 'Instagram' },
   ]
@@ -104,7 +104,7 @@ const Footer = () => {
               <div className="flex items-center space-x-2">
                 <Mail className="h-4 w-4 text-blue-400" />
                 <a href="mailto:info@ethiobus.com" className="text-gray-300 text-sm hover:text-white">
-                  info@ethiobus.com
+                  abrahamworku10a@gmail.com
                 </a>
               </div>
               <div className="flex items-center space-x-2">

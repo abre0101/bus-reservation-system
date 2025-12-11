@@ -1,8 +1,13 @@
 from app import create_app, socketio
 import os
+import sys
 import threading
 import time
 from datetime import datetime
+
+# Force unbuffered output for better logging in production
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
 
 app = create_app()
 

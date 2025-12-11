@@ -174,20 +174,35 @@ def get_available_cities():
         origin_cities = list(mongo.db.busschedules.distinct('origin_city'))
         destination_cities = list(mongo.db.busschedules.distinct('destination_city'))
         
-        print(f"📍 Origin cities: {origin_cities}")
-        print(f"📍 Destination cities: {destination_cities}")
+        print(f"📍 Raw origin cities: {origin_cities}")
+        print(f"📍 Raw destination cities: {destination_cities}")
         
         # Also get from routes collection as fallback
         route_origins = list(mongo.db.routes.distinct('origin_city'))
         route_destinations = list(mongo.db.routes.distinct('destination_city'))
         
-        # Combine all sources and remove duplicates
+        # Combine all sources
         all_cities = origin_cities + destination_cities + route_origins + route_destinations
-        unique_cities = list(set(all_cities))
         
-        # Remove any None or empty values and sort
-        unique_cities = [city for city in unique_cities if city]
-        unique_cities.sort()
+        # Clean up cities: trim spaces, remove None/empty, normalize
+        cleaned_cities = []
+        for city in all_cities:
+            if city:
+                # Strip whitespace and normalize
+                cleaned = city.strip()
+                if cleaned:
+                    cleaned_cities.append(cleaned)
+        
+        # Remove duplicates (case-insensitive)
+        unique_cities_map = {}
+        for city in cleaned_cities:
+            # Use title case as the key to detect duplicates
+            key = city.title()
+            if key not in unique_cities_map:
+                unique_cities_map[key] = city
+        
+        # Get unique cities and sort
+        unique_cities = sorted(list(unique_cities_map.values()))
         
         print(f"✅ Found {len(unique_cities)} unique cities: {unique_cities}")
         

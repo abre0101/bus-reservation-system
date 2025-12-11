@@ -397,7 +397,7 @@ const Home = () => {
                       <div className="flex items-center justify-between mb-4">
                         <div>
                           <span className="text-2xl font-bold text-indigo-600">
-                            {formatPrice(route.base_fare_birr)}
+                            {formatPrice(route.fare_birr || route.base_fare_birr || 0)}
                           </span>
                           <span className="text-sm text-gray-500 block">Starting from</span>
                         </div>

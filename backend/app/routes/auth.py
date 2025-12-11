@@ -3,6 +3,7 @@ from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identi
 from app import mongo, bcrypt
 from bson import ObjectId
 from datetime import datetime
+import sys
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -10,8 +11,8 @@ auth_bp = Blueprint('auth', __name__)
 def register():
     try:
         data = request.get_json()
-        print(f"📝 Registration attempt for: {data.get('email')}")
-        print(f"📊 Registration data received: {list(data.keys())}")
+        print(f"📝 Registration attempt for: {data.get('email')}", flush=True)
+        print(f"📊 Registration data received: {list(data.keys())}", flush=True)
 
         # Validate required fields
         required_fields = ['name', 'email', 'password']

@@ -80,7 +80,7 @@ const Contact = () => {
                 <div className="flex-1">
                   <h3 className="font-bold text-gray-900 text-lg mb-2">Email Us</h3>
                   <p className="text-green-600 font-semibold text-base">support@ethiobus.com</p>
-                  <p className="text-green-600 font-semibold text-base">info@ethiobus.com</p>
+                  <p className="text-green-600 font-semibold text-base">abrahamworku10a@gmail.com</p>
                   <p className="text-gray-600 text-sm mt-2 flex items-center">
                     <Clock className="h-3 w-3 mr-1" />
                     We reply within 2 hours
