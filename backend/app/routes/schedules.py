@@ -168,19 +168,30 @@ def schedules_health():
 # Get all available cities
 @schedules_bp.route('/cities', methods=['GET'])
 def get_available_cities():
-    """Get all unique cities from routes"""
+    """Get all unique cities from schedules"""
     try:
-        # Get unique cities from both origin and destination
-        origin_cities = list(mongo.db.routes.distinct('origin_city'))
-        destination_cities = list(mongo.db.routes.distinct('destination_city'))
+        print("🏙️ Fetching available cities from schedules...")
         
-        # Combine and remove duplicates
-        all_cities = origin_cities + destination_cities
+        # Get unique cities from schedules (both origin and destination)
+        origin_cities = list(mongo.db.busschedules.distinct('origin_city'))
+        destination_cities = list(mongo.db.busschedules.distinct('destination_city'))
+        
+        print(f"📍 Origin cities: {origin_cities}")
+        print(f"📍 Destination cities: {destination_cities}")
+        
+        # Also get from routes collection as fallback
+        route_origins = list(mongo.db.routes.distinct('origin_city'))
+        route_destinations = list(mongo.db.routes.distinct('destination_city'))
+        
+        # Combine all sources and remove duplicates
+        all_cities = origin_cities + destination_cities + route_origins + route_destinations
         unique_cities = list(set(all_cities))
         
         # Remove any None or empty values and sort
         unique_cities = [city for city in unique_cities if city]
         unique_cities.sort()
+        
+        print(f"✅ Found {len(unique_cities)} unique cities: {unique_cities}")
         
         response = jsonify({
             "success": True,
@@ -189,9 +200,13 @@ def get_available_cities():
         })
         return add_cors_headers(response)
     except Exception as e:
+        print(f"❌ Error fetching cities: {e}")
+        import traceback
+        traceback.print_exc()
         response = jsonify({
             "success": False,
-            "error": str(e)
+            "error": str(e),
+            "cities": []
         })
         return add_cors_headers(response), 500
 
